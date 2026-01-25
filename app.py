@@ -6,158 +6,87 @@ from datetime import datetime, timedelta
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from models import db, User, Recipe, Pump, PourHistory, MachineState
 # --- GPIO Configuration & Hardware Interface ---
+# Active-Low Relay Logic: GPIO.LOW = Relay ON (pump running), GPIO.HIGH = Relay OFF (pump stopped)
 GPIO_AVAILABLE = False
 try:
     import RPi.GPIO as GPIO
     GPIO_AVAILABLE = True
     GPIO.setmode(GPIO.BCM)
-    # Turn off warnings
     GPIO.setwarnings(False)
     print("✅ RPi.GPIO module loaded. Hardware control enabled.")
 except ImportError:
     print("⚠️ RPi.GPIO not found. Running in SIMULATION mode.")
 
-def pour_ingredient(pump_id, duration):
+
+def initialize_pump_pin(pin_number):
     """
-    Control the pump to pour ingredient.
-    Handles both Simulation Mode and Real GPIO Mode.
+    Initialize a GPIO pin for pump control (Active-Low relay).
+    Sets pin as OUTPUT and immediately sets HIGH to ensure pump is OFF.
     
     Args:
-        pump_id (int): The ID of the pump (database ID)
-        duration (float): How long to run the pump in seconds
+        pin_number (int): The BCM GPIO pin number
     """
-    # Create a new app context since this runs in a thread
-    # and we might access DB (though here we just need Pin numbers)
-    # For thread safety, best to pass pin number directly, but we only have pump_id here.
-    # However, to avoid DB access issues in threads without context, 
-    # we should fetch the pin number BEFORE calling this function or use app.app_context()
+    if GPIO_AVAILABLE and pin_number:
+        GPIO.setup(pin_number, GPIO.OUT)
+        GPIO.output(pin_number, GPIO.HIGH)  # HIGH = OFF for Active-Low relay
+        print(f"📌 Pin {pin_number} initialized as OUTPUT (set HIGH - pump OFF)")
+
+
+def pour_ingredient(pin_number, duration, pump_id=None):
+    """
+    Control the pump to pour ingredient using Active-Low relay logic.
+    Handles both Simulation Mode and Real GPIO Mode.
     
-    # Resolving Pin Number:
-    # In a real scenario, we'd pass the pin number. 
-    # For now, let's query the specific Pump to get its pin.
+    Active-Low Logic:
+        - GPIO.LOW  = Relay activated = Pump ON (pouring)
+        - GPIO.HIGH = Relay deactivated = Pump OFF (stopped)
     
-    # CRITICAL: We need an application context to query the DB in this thread
-    # But to keep it simple and match previous architecture which didn't use app context:
-    # We will assume simple GPIO control or Simulation.
-    
-    # FOR NOW: Let's assume standard Pin mapping if not provided or just log 'Simulating'
-    # if we are in simulation mode.
-    
+    Args:
+        pin_number (int): The BCM GPIO pin number (from Pump.pin_number in database)
+        duration (float): How long to run the pump in seconds
+        pump_id (int, optional): The pump ID for logging purposes
+    """
     import time
+    
+    pump_label = f"Pump {pump_id}" if pump_id else f"Pin {pin_number}"
     
     if not GPIO_AVAILABLE:
         # --- SIMULATION MODE ---
-        print(f"🧪 [SIMULATION] START: Pump {pump_id} running for {duration:.2f}s")
+        print(f"🧪 [SIMULATION] START: {pump_label} (Pin {pin_number}) running for {duration:.2f}s")
         time.sleep(duration)
-        print(f"🧪 [SIMULATION] STOP: Pump {pump_id} finished")
+        print(f"🧪 [SIMULATION] STOP: {pump_label} finished")
         return True
     
-    else:
-        # --- REAL HARDWARE MODE ---
-        # We need the PIN number. 
-        # Since we are in a thread, we need to create an app context to query the DB safely
-        # OR we can hardcode a mapping fallback if DB fails.
-        # Let's try to get it properly.
-        
-        # NOTE: The original call passed pump_id. 
-        # To avoid circular imports or context errors, we will move the DB query 
-        # into this function but wrap it in app context IF app is imported globally.
-        # But 'app' is defined later in this file? No, it's lines 15.
-        # Since this function is defined at line 8 replacement, 'app' isn't defined yet!
-        # PROBLEM: 'app' is defined at line 15. We are inserting at line 8.
-        # We cannot use 'app.app_context()' here because 'app' doesn't exist yet.
-        
-        # SOLUTION: We will define this function AFTER app initialization, 
-        # OR we modify the caller to pass the PIN number instead of just pump_id.
-        # But the User asked to "Update logic in app.py".
-        # 
-        # Alternative: Just use a hardcoded map for now or fetch it inside the thread 
-        # assuming 'from app import app' works inside? No, circular.
-        
-        # BEST APPROACH: 
-        # Define the function here, but use a helper to get pin
-        # actually, let's place this function definition AFTER 'app = Flask(__name__)'?
-        # No, replacing line 8 is easiest.
-        # Let's import 'current_app' or similar? No.
-        
-        # Let's cheat slightly: The caller (pour_cocktail) has access to the Pump object.
-        # It's better to pass the PIN NUMBER to this function.
-        # But 'pour_cocktail' calls 'pour_ingredient(pump_id, duration)'.
-        # I should update 'pour_cocktail' to pass 'pin_number' as well.
-        #
-        # However, looking at 'pour_cocktail' implementation in app.py:
-        # Line 396: pump = Pump.query.get(pump_id)
-        # Line 406: thread = threading.Thread(target=pour_ingredient, args=(pump_id, duration))
-        #
-        # So I *can* change the caller to pass pin_number.
-        
-        pass
-
-# We will handle the function body details in the next step or keep it generic.
-# Actually, I'll define a simple global map for defaults or just handle simulation for now 
-# and log an error if real mode but no pin.
-#
-# Wait, I can import Pump inside the function? 
-# "from models import Pump, db" is available globally.
-# But "app" is not.
-#
-# Let's change the strategy:
-# 1. Replace the import with the GPIO setup.
-# 2. Define `pour_ingredient` to take `pin_number` as an optional arg or just `pump_id`.
-# 3. Inside `pour_ingredient`, if REAL MODE, we need the PIN. 
-#    If I can't easily get the pin, I'll fail or use a default map.
-#    Wait, 'hardware_mock.py' didn't use Pins. It just logged used pump_id.
-#    So for *Safety code adaptation*, I will implement the Try-Except as requested.
-#    And detailed logic.
-
-# Let's sticking to the plan:
-# I will define `pour_ingredient` here. 
-# Inside checks `GPIO_AVAILABLE`.
-# If True, it needs a Pin.
-# I will Use a manual DB session or just passed arguments.
-# Since I can't easily change the arguments in this specific tool call (it's a replace),
-# I'll stick to the existing signature for now, and maybe update the Caller in a second edit 
-# if needed.
-#
-# actually, I can create a new context inside.
-# `from flask import current_app`
-# with app.app_context(): ... 
-# But `app` is not defined yet.
-#
-# Okay, I will define `pour_ingredient` as a placeholder here, 
-# And then I will MOVE it or Modify the Caller to pass the generic PINs.
-#
-# BETTER IDEA:
-# Just define the variable GPIO_AVAILABLE and the Setup here.
-# And define `pour_ingredient` to just log for now (Simulation) 
-# OR use a hardcoded dictionary map for 1-8.
-# 1->17, 2->18, 3->27, 4->22, 5->23, 6->24, 7->25, 8->4 (standard RPi Relay mapping)
-# usage:
-# RELAY_GPIO_MAP = {1: 17, 2: 18, 3: 27, 4: 22, 5: 23, 6: 24, 7: 25, 8: 4}
-
-    RELAY_PINS = {1: 17, 2: 18, 3: 27, 4: 22, 5: 23, 6: 24, 7: 25, 8: 4}
+    # --- REAL HARDWARE MODE (Active-Low relay) ---
+    if not pin_number:
+        print(f"❌ {pump_label} has no pin assigned - SKIPPED")
+        return False
     
-    if GPIO_AVAILABLE:
-        pin = RELAY_PINS.get(pump_id)
-        if pin:
-            GPIO.setup(pin, GPIO.OUT)
-            GPIO.output(pin, GPIO.LOW) # Active LOW usually? Or HIGH?
-            # Industrial relays often Active LOW. 
-            # But let's assume Active LOW (ON) for safety, or HIGH.
-            # Usually: Turn ON -> sleep -> Turn OFF.
-            # Let's assume Active LOW means ON (common for relay boards).
-            # GPIO.output(pin, GPIO.LOW) # ON
-            # time.sleep(duration)
-            # GPIO.output(pin, GPIO.HIGH) # OFF
-            
-            # Let's assume Active LOW:
-            GPIO.output(pin, GPIO.LOW) # Start Pour
-            print(f"⚡ [HARDWARE] Pump {pump_id} (Pin {pin}) ON")
-            time.sleep(duration)
-            GPIO.output(pin, GPIO.HIGH) # Stop Pour
-            print(f"⚡ [HARDWARE] Pump {pump_id} (Pin {pin}) OFF")
-        else:
-             print(f"❌ Pump {pump_id} (No Pin Mapping) [SKIPPED]")
+    try:
+        # Ensure pin is configured as output with initial HIGH state (OFF)
+        GPIO.setup(pin_number, GPIO.OUT, initial=GPIO.HIGH)
+        
+        # ACTIVE-LOW: Set pin LOW to turn pump ON
+        GPIO.output(pin_number, GPIO.LOW)
+        print(f"⚡ [HARDWARE] {pump_label} (Pin {pin_number}) ON - Pouring...")
+        
+        time.sleep(duration)
+        
+        # ACTIVE-LOW: Set pin HIGH to turn pump OFF
+        GPIO.output(pin_number, GPIO.HIGH)
+        print(f"⚡ [HARDWARE] {pump_label} (Pin {pin_number}) OFF - Complete")
+        return True
+        
+    except Exception as e:
+        # Safety: Ensure pin is set HIGH (OFF) on any error
+        try:
+            GPIO.output(pin_number, GPIO.HIGH)
+        except:
+            pass
+        print(f"❌ [ERROR] {pump_label} (Pin {pin_number}): {str(e)}")
+        return False
+
+
 from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 from html import escape
@@ -549,13 +478,20 @@ def pour_cocktail(recipe_id):
             
             if not pump:
                 continue
+            
+            # Get dynamic pin_number from database (set via Admin UI)
+            pin_number = pump.pin_number
+            
+            # Initialize pin to HIGH (OFF) before pouring to prevent auto-start
+            initialize_pump_pin(pin_number)
                 
             # Convert ML to seconds using calibration: Time = (ML / 50) * seconds_per_50ml
             duration = (ml_amount / 50.0) * pump.seconds_per_50ml
             durations.append(duration)
             
             # Create and start a thread for GPIO activation
-            thread = threading.Thread(target=pour_ingredient, args=(pump_id, duration))
+            # Pass pin_number (dynamic from DB), duration, and pump_id (for logging)
+            thread = threading.Thread(target=pour_ingredient, args=(pin_number, duration, pump_id))
             threads.append(thread)
             thread.start()
         
