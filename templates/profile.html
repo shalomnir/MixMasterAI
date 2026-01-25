@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<!-- Shareable Stats Card Container -->
+<div class="min-h-screen flex items-center justify-center py-8 px-4">
+    <div class="w-full max-w-md">
+        <!-- Shareable Card -->
+        <div class="glass rounded-3xl border-2 border-transparent bg-gradient-to-r from-pink-500/20 via-purple-500/20 to-violet-500/20 overflow-hidden shadow-2xl"
+            style="box-shadow: 0 0 30px rgba(168, 85, 247, 0.4), 0 20px 40px rgba(0, 0, 0, 0.3); backdrop-filter: blur(10px);">
+
+            <!-- Streamlined Header -->
+            <div class="bg-gradient-to-r from-pink-500 via-purple-500 to-violet-500 px-6 py-4 text-center">
+                <div class="flex items-center justify-center gap-4 text-white text-lg">
+                    <span class="font-bold">{{ current_user.nickname }}</span>
+                    <span class="text-white/60">•</span>
+                    <span class="flex items-center gap-1">
+                        <span class="text-yellow-300 font-black text-xl">{{ current_user.points }}</span>
+                        <span class="font-medium">points</span>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="p-5 space-y-3" id="stats-container">
+
+                <!-- Primary Stats Row -->
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- Total Alcohol -->
+                    <div
+                        class="bg-gradient-to-br from-pink-500/30 to-purple-500/30 rounded-2xl p-5 border border-pink-500/40 text-center">
+                        <div class="text-4xl mb-2">🍺</div>
+                        <div id="stat-alcohol" class="text-5xl font-black text-pink-300 mb-1">--</div>
+                        <p class="text-white/70 text-xs font-medium uppercase tracking-wide">ml Poured</p>
+                    </div>
+
+                    <!-- Current Rank -->
+                    <div
+                        class="bg-gradient-to-br from-blue-500/30 to-cyan-500/30 rounded-2xl p-5 border border-blue-500/40 text-center">
+                        <div class="text-4xl mb-2">🏆</div>
+                        <div id="stat-rank" class="text-5xl font-black text-blue-300 mb-1">--</div>
+                        <p class="text-white/70 text-xs font-medium uppercase tracking-wide">Rank</p>
+                    </div>
+                </div>
+
+                <!-- Secondary Stats Row -->
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- Favorite Cocktail -->
+                    <div
+                        class="bg-gradient-to-br from-yellow-500/30 to-orange-500/30 rounded-2xl p-5 border border-yellow-500/40 text-center">
+                        <div class="text-4xl mb-2">🍹</div>
+                        <div id="stat-favorite" class="text-lg font-bold text-yellow-300 mb-1 truncate">--</div>
+                        <p class="text-white/70 text-xs font-medium uppercase tracking-wide">Favorite</p>
+                    </div>
+
+                    <!-- Strong Mode % -->
+                    <div
+                        class="bg-gradient-to-br from-red-500/30 to-orange-500/30 rounded-2xl p-5 border border-red-500/40 text-center">
+                        <div class="text-4xl mb-2">🔥</div>
+                        <div id="stat-strong" class="text-5xl font-black text-red-300 mb-1">--</div>
+                        <p class="text-white/70 text-xs font-medium uppercase tracking-wide">Strong Mode</p>
+                    </div>
+                </div>
+
+                <!-- Motivational Footer -->
+                <div class="text-center pt-1 pb-1">
+                    <p class="text-slate-400 text-sm italic" id="motivational-text">Loading your stats...</p>
+                </div>
+            </div>
+
+            <!-- Footer Branding -->
+            <div class="bg-slate-900/50 px-6 py-3 text-center border-t border-white/5">
+                <p class="text-slate-500 text-xs">Made with ❤️ by MixMaster AI</p>
+            </div>
+        </div>
+
+        <!-- Action Buttons - Below the shareable card -->
+        <div class="mt-6 space-y-3">
+            <!-- Account Settings (collapsed by default) -->
+            <details class="glass rounded-xl border border-white/5 overflow-hidden">
+                <summary
+                    class="px-6 py-4 cursor-pointer text-slate-300 hover:text-white transition-colors font-medium text-sm">
+                    ⚙️ Account Settings
+                </summary>
+                <div class="px-6 pb-6 space-y-4 border-t border-white/5 pt-4">
+                    <!-- Recovery Key Display -->
+                    <div class="bg-slate-800/50 rounded-xl p-4">
+                        <p class="text-slate-400 text-xs mb-2">Your Recovery Key</p>
+                        <p class="text-white font-mono text-lg tracking-wider">{{ current_user.recovery_key }}</p>
+                        <p class="text-slate-500 text-xs mt-2">Save this to recover your account</p>
+                    </div>
+
+                    <!-- Danger Zone -->
+                    <div class="border border-red-900/30 bg-red-900/10 rounded-xl p-4">
+                        <h3 class="text-red-400 font-bold text-sm mb-2">Danger Zone</h3>
+                        <p class="text-slate-400 text-xs mb-4">Deleting your account cannot be undone.</p>
+                        <form method="POST" action="{{ url_for('profile') }}"
+                            onsubmit="return confirm('Are you sure? This cannot be undone.');">
+                            <input type="hidden" name="action" value="delete_account">
+                            <button type="submit"
+                                class="w-full py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 text-red-400 rounded-lg font-bold text-sm transition-colors">
+                                Delete Account
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </details>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Fetch and display user statistics
+    document.addEventListener('DOMContentLoaded', async function () {
+        try {
+            const response = await fetch('/api/user/statistics');
+            const data = await response.json();
+
+            if (data.status === 'success') {
+                // Update statistics cards
+                const container = document.getElementById('stats-container');
+                container.style.opacity = '0';
+
+                // Total Alcohol
+                const alcoholValue = data.total_alcohol_ml > 0 ? Math.round(data.total_alcohol_ml) : 0;
+                document.getElementById('stat-alcohol').textContent = alcoholValue;
+
+                // Favorite Cocktail
+                const favorite = data.favorite_cocktail || 'Exploring...';
+                document.getElementById('stat-favorite').textContent = favorite;
+
+                // Current Rank
+                document.getElementById('stat-rank').textContent =
+                    data.current_rank > 0 ? `#${data.current_rank}` : '--';
+
+                // Strong Mode %
+                const strongElement = document.getElementById('stat-strong');
+                const strongText = data.total_pours > 0
+                    ? (data.strong_mode_percentage > 0 ? `${data.strong_mode_percentage}%` : 'Standard')
+                    : 'Standard';
+                strongElement.textContent = strongText;
+
+                // Adjust font size: smaller for text, larger for percentages
+                if (strongText === 'Standard') {
+                    strongElement.className = 'text-3xl font-black text-red-300 mb-1';
+                } else {
+                    strongElement.className = 'text-5xl font-black text-red-300 mb-1';
+                }
+
+                // Update motivational text based on stats
+                let motivationalText = "Keep mixing to level up! 🎉";
+                if (data.current_rank === 1) {
+                    motivationalText = "🎊 You're #1! Keep dominating!";
+                } else if (data.current_rank <= 3) {
+                    motivationalText = "🔥 Top 3! Amazing work!";
+                } else if (data.total_pours === 0) {
+                    motivationalText = "Pour your first drink to get started! 🍹";
+                }
+                document.getElementById('motivational-text').textContent = motivationalText;
+
+                // Fade in the stats
+                setTimeout(() => {
+                    container.style.transition = 'opacity 0.5s ease-in';
+                    container.style.opacity = '1';
+                }, 100);
+            } else {
+                console.error('Error fetching statistics:', data.message);
+                document.getElementById('motivational-text').textContent =
+                    "Unable to load stats. Please refresh.";
+            }
+        } catch (error) {
+            console.error('Failed to fetch statistics:', error);
+            document.getElementById('motivational-text').textContent =
+                "Unable to load stats. Please refresh.";
+        }
+    });
+</script>
+{% endblock %}

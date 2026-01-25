@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="space-y-12">
+
+    <!-- Header -->
+    <div>
+        <h2 class="text-3xl font-bold">Admin Dashboard</h2>
+        <p class="text-slate-400">Manage machine configuration and recipes.</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+
+        <!-- Pump Configuration -->
+        <section class="space-y-6">
+            <h3 class="text-xl font-bold flex items-center space-x-2">
+                <span class="w-2 h-8 bg-pink-500 rounded-full inline-block"></span>
+                <span>Pump Configuration</span>
+            </h3>
+            <div class="space-y-4">
+                {% for pump in pumps %}
+                <div class="glass p-4 rounded-xl flex items-center justify-between border border-white/5">
+                    <div class="flex items-center space-x-4">
+                        <div
+                            class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-mono font-bold text-slate-400">
+                            {{ pump.id }}
+                        </div>
+                        <span class="text-lg font-medium">{{ pump.ingredient_name }}</span>
+                    </div>
+
+                    <form method="POST" action="{{ url_for('admin') }}" class="flex items-center space-x-2">
+                        <input type="hidden" name="update_pump" value="1">
+                        <input type="hidden" name="pump_id" value="{{ pump.id }}">
+                        <input type="text" name="ingredient_name" placeholder="New Ingredient" required
+                            class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1 text-sm focus:outline-none focus:border-pink-500">
+                        <button type="submit"
+                            class="text-sm bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded-lg transition">
+                            Update
+                        </button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Recipe Managment -->
+        <section class="space-y-6">
+            <h3 class="text-xl font-bold flex items-center space-x-2">
+                <span class="w-2 h-8 bg-violet-500 rounded-full inline-block"></span>
+                <span>Create Recipe</span>
+            </h3>
+
+            <div class="glass p-6 rounded-2xl border border-white/5 space-y-4">
+                <form method="POST" action="{{ url_for('admin') }}" class="space-y-4">
+                    <input type="hidden" name="create_recipe" value="1">
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Recipe Name</label>
+                        <input type="text" name="name" required placeholder="e.g. Rum & Coke"
+                            class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:outline-none focus:ring-1 focus:ring-violet-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Ingredients
+                            (PumpID:DurationSeconds)</label>
+                        <input type="text" name="ingredients" required placeholder="e.g. 1:2, 2:4"
+                            class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono text-sm">
+                        <p class="text-xs text-slate-500 mt-1">Comma separated. E.g., Pump 1 for 2s, Pump 2 for 4s.</p>
+                    </div>
+
+                    <button type="submit"
+                        class="w-full bg-violet-600 hover:bg-violet-500 py-3 rounded-xl font-bold transition">
+                        Create Recipe
+                    </button>
+                </form>
+            </div>
+
+            <!-- Existing Recipes List -->
+            <div class="space-y-2">
+                <h4 class="font-bold text-slate-400 text-sm uppercase tracking-wider">Existing Recipes</h4>
+                <div class="max-h-64 overflow-y-auto space-y-2 custom-scrollbar">
+                    {% for recipe in recipes %}
+                    <div class="bg-slate-800/50 p-3 rounded-lg flex justify-between items-center">
+                        <span>{{ recipe.name }}</span>
+                        <span class="text-xs font-mono text-slate-500">{{ recipe.ingredients_json }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+        </section>
+
+    </div>
+</div>
+{% endblock %}
