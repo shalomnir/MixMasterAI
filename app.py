@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from models import db, User, Recipe, Pump, PourHistory, MachineState
 # --- GPIO Configuration & Hardware Interface ---
-# Active-Low Relay Logic: GPIO.LOW = Relay ON (pump running), GPIO.HIGH = Relay OFF (pump stopped)
+# Active-High Relay Logic: GPIO.HIGH = Relay ON (pump running), GPIO.LOW = Relay OFF (pump stopped)
 GPIO_AVAILABLE = False
 try:
     import RPi.GPIO as GPIO
@@ -20,26 +20,26 @@ except ImportError:
 
 def initialize_pump_pin(pin_number):
     """
-    Initialize a GPIO pin for pump control (Active-Low relay).
-    Sets pin as OUTPUT and immediately sets HIGH to ensure pump is OFF.
+    Initialize a GPIO pin for pump control (Active-High relay).
+    Sets pin as OUTPUT and immediately sets LOW to ensure pump is OFF.
     
     Args:
         pin_number (int): The BCM GPIO pin number
     """
     if GPIO_AVAILABLE and pin_number:
         GPIO.setup(pin_number, GPIO.OUT)
-        GPIO.output(pin_number, GPIO.HIGH)  # HIGH = OFF for Active-Low relay
-        print(f"📌 Pin {pin_number} initialized as OUTPUT (set HIGH - pump OFF)")
+        GPIO.output(pin_number, GPIO.LOW)  # LOW = OFF for Active-High relay
+        print(f"📌 Pin {pin_number} initialized as OUTPUT (set LOW - pump OFF)")
 
 
 def pour_ingredient(pin_number, duration, pump_id=None):
     """
-    Control the pump to pour ingredient using Active-Low relay logic.
+    Control the pump to pour ingredient using Active-High relay logic.
     Handles both Simulation Mode and Real GPIO Mode.
     
-    Active-Low Logic:
-        - GPIO.LOW  = Relay activated = Pump ON (pouring)
-        - GPIO.HIGH = Relay deactivated = Pump OFF (stopped)
+    Active-High Logic:
+        - GPIO.HIGH = Relay activated = Pump ON (pouring)
+        - GPIO.LOW  = Relay deactivated = Pump OFF (stopped)
     
     Args:
         pin_number (int): The BCM GPIO pin number (from Pump.pin_number in database)
@@ -63,24 +63,24 @@ def pour_ingredient(pin_number, duration, pump_id=None):
         return False
     
     try:
-        # Ensure pin is configured as output with initial HIGH state (OFF)
-        GPIO.setup(pin_number, GPIO.OUT, initial=GPIO.HIGH)
+        # Ensure pin is configured as output with initial LOW state (OFF)
+        GPIO.setup(pin_number, GPIO.OUT, initial=GPIO.LOW)
         
-        # ACTIVE-LOW: Set pin LOW to turn pump ON
-        GPIO.output(pin_number, GPIO.LOW)
+        # ACTIVE-HIGH: Set pin HIGH to turn pump ON
+        GPIO.output(pin_number, GPIO.HIGH)
         print(f"⚡ [HARDWARE] {pump_label} (Pin {pin_number}) ON - Pouring...")
         
         time.sleep(duration)
         
-        # ACTIVE-LOW: Set pin HIGH to turn pump OFF
-        GPIO.output(pin_number, GPIO.HIGH)
+        # ACTIVE-HIGH: Set pin LOW to turn pump OFF
+        GPIO.output(pin_number, GPIO.LOW)
         print(f"⚡ [HARDWARE] {pump_label} (Pin {pin_number}) OFF - Complete")
         return True
         
     except Exception as e:
-        # Safety: Ensure pin is set HIGH (OFF) on any error
+        # Safety: Ensure pin is set LOW (OFF) on any error
         try:
-            GPIO.output(pin_number, GPIO.HIGH)
+            GPIO.output(pin_number, GPIO.LOW)
         except:
             pass
         print(f"❌ [ERROR] {pump_label} (Pin {pin_number}): {str(e)}")
