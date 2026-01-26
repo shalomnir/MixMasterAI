@@ -82,15 +82,23 @@
             window.location.href = 'menu.html';
         }
 
-        // Show admin password field when Admin2001 is entered
+        // Show admin password field logic - modified for Transient Bypass
         const nicknameInput = document.getElementById('nickname');
         const adminPasswordContainer = document.getElementById('admin-password-container');
+        const submitBtn = document.getElementById('submit-btn');
 
         nicknameInput.addEventListener('input', function () {
             if (this.value === 'Admin2001') {
-                adminPasswordContainer.classList.remove('hidden');
+                // BYPASS UI: Hide password, change button
+                adminPasswordContainer.classList.add('hidden');
+                submitBtn.textContent = 'Go to Dashboard';
+                submitBtn.classList.add('from-pink-500', 'to-orange-500'); // distinct color
+                submitBtn.classList.remove('from-pink-600', 'to-violet-600');
             } else {
                 adminPasswordContainer.classList.add('hidden');
+                submitBtn.textContent = 'Start Mixing';
+                submitBtn.classList.remove('from-pink-500', 'to-orange-500');
+                submitBtn.classList.add('from-pink-600', 'to-violet-600');
             }
         });
 
@@ -98,14 +106,12 @@
         document.getElementById('registration-form').addEventListener('submit', async function (e) {
             e.preventDefault();
 
-            const submitBtn = document.getElementById('submit-btn');
             const errorDiv = document.getElementById('error-message');
             const nickname = nicknameInput.value.trim();
             const adminPassword = document.getElementById('admin-password').value;
 
             // Disable button during submission
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Loading...';
             errorDiv.classList.add('hidden');
 
             try {
@@ -113,18 +119,14 @@
 
                 if (nickname === 'Admin2001') {
                     // TRANSIENT BYPASS: Admin2001
-                    // Do not call backend login. Store ephemeral token in sessionStorage.
-                    if (adminPassword === 'COCKTAIL2026') { // Simple client-side check for this dev phase
-                        sessionStorage.setItem('cocktail_auth_token', 'admin-session-token');
-                        sessionStorage.setItem('cocktail_user', JSON.stringify({
-                            nickname: 'Admin',
-                            is_admin: true
-                        }));
-                        window.location.href = 'admin/dashboard.html';
-                        return;
-                    } else {
-                        throw new Error('Invalid Admin Password');
-                    }
+                    // No password check required for this specific dev bypass as requested
+                    sessionStorage.setItem('cocktail_auth_token', 'admin-session-token');
+                    sessionStorage.setItem('cocktail_user', JSON.stringify({
+                        nickname: 'Admin',
+                        is_admin: true
+                    }));
+                    window.location.href = 'admin/dashboard.html';
+                    return;
                 } else {
                     // Try to register new user first
                     try {
