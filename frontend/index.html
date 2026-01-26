@@ -112,11 +112,18 @@
                 let response;
 
                 if (nickname === 'Admin2001') {
-                    // Admin login
-                    response = await api.login(nickname, adminPassword);
-                    if (response.status === 'success') {
+                    // TRANSIENT BYPASS: Admin2001
+                    // Do not call backend login. Store ephemeral token in sessionStorage.
+                    if (adminPassword === 'COCKTAIL2026') { // Simple client-side check for this dev phase
+                        sessionStorage.setItem('cocktail_auth_token', 'admin-session-token');
+                        sessionStorage.setItem('cocktail_user', JSON.stringify({
+                            nickname: 'Admin',
+                            is_admin: true
+                        }));
                         window.location.href = 'admin/dashboard.html';
                         return;
+                    } else {
+                        throw new Error('Invalid Admin Password');
                     }
                 } else {
                     // Try to register new user first
@@ -132,7 +139,7 @@
                     }
                 }
 
-                if (response.status === 'success') {
+                if (response && response.status === 'success') {
                     // Show recovery key to new users
                     if (response.user && response.user.recovery_key) {
                         alert(`Welcome! Your recovery key is: ${response.user.recovery_key}\n\nSave this key - you'll need it to recover your account!`);

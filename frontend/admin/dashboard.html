@@ -69,17 +69,23 @@
     <!-- API Client -->
     <script src="../js/api.js"></script>
     <script>
-        // Auth Check
+        // TRANSIENT AUTH CHECK
+        // Check sessionStorage for the transient admin token
+        const sessionToken = sessionStorage.getItem('cocktail_auth_token');
+        if (sessionToken) {
+            // Inject into API client so it sends it with requests
+            api.setToken(sessionToken);
+            // Also set user if needed for UI
+            const sessionUser = sessionStorage.getItem('cocktail_user');
+            if (sessionUser) {
+                api.setUser(JSON.parse(sessionUser));
+            }
+        }
+
+        // Auth Check (now that API has the token)
         if (!api.isAuthenticated()) {
             window.location.href = '../index.html';
         }
-
-        // Admin Check (optional, backend enforces it too)
-        // const user = api.getUser();
-        // if (!user || user.nickname !== 'Admin2001') {
-        //    alert('Unauthorized');
-        //    window.location.href = '../menu.html';
-        // }
     </script>
 </head>
 

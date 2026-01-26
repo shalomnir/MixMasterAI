@@ -100,16 +100,36 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Permanent session configuration (12-hour lifetime)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
+app.config['SESSION_COOKIE_SAMESITE'] = 'None' # Changed to None for cross-site if needed, or keep Strict if same domain
+app.config['SESSION_COOKIE_SECURE'] = True # Secure required for None
 
 from flask_cors import CORS
-CORS(app, supports_credentials=True)  # Enable CORS for all routes
+# Allow both localhost (dev) and production app
+CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": ["http://localhost:5000", "https://mixmasterai.app", "https://api.mixmasterai.app"]}})
 
 db.init_app(app)
 
 login_manager = LoginManager()
 login_manager.login_view = 'index'
 login_manager.init_app(app)
+
+# Helper for Admin Auth (Cookie OR Header)
+def check_admin_auth():
+    # 1. Check Magic Header (Transient Session)
+    auth_header = request.headers.get('Authorization')
+    if auth_header == 'Bearer admin-session-token':
+        return True
+        
+    # 2. Check Legacy Cookie
+    admin_password = request.cookies.get('admin_password')
+    if admin_password == 'COCKTAIL2026':
+        return True
+        
+    # 3. Check Flask Login (if User is Admin)
+    if current_user.is_authenticated and getattr(current_user, 'is_admin', False):
+        return True
+        
+    return False
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -814,9 +834,7 @@ def get_global_settings():
 @app.route('/api/admin/update', methods=['POST'])
 def admin_api_update():
     """Generic API endpoint for admin auto-save updates"""
-    # Security check is critical here
-    admin_password = request.cookies.get('admin_password')
-    if admin_password != 'COCKTAIL2026':
+    if not check_admin_auth():
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
 
     data = request.get_json()
@@ -911,8 +929,7 @@ def admin_api_update():
 
 @app.route('/api/admin/recipe/save', methods=['POST'])
 def admin_api_save_recipe():
-    admin_password = request.cookies.get('admin_password')
-    if admin_password != 'COCKTAIL2026':
+    if not check_admin_auth():
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
 
     data = request.get_json()
@@ -969,8 +986,7 @@ def admin_api_save_recipe():
 
 @app.route('/api/admin/user/save', methods=['POST'])
 def admin_api_save_user():
-    admin_password = request.cookies.get('admin_password')
-    if admin_password != 'COCKTAIL2026':
+    if not check_admin_auth():
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
 
     data = request.get_json()
@@ -1004,8 +1020,7 @@ def admin_api_save_user():
 
 @app.route('/api/admin/action', methods=['POST'])
 def admin_api_action():
-    admin_password = request.cookies.get('admin_password')
-    if admin_password != 'COCKTAIL2026':
+    if not check_admin_auth():
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
 
     data = request.get_json()
@@ -1047,8 +1062,7 @@ def admin_api_action():
 @app.route('/api/admin/category-volumes', methods=['GET', 'POST'])
 def admin_api_category_volumes():
     """Admin API endpoint to get/set all category volumes"""
-    admin_password = request.cookies.get('admin_password')
-    if admin_password != 'COCKTAIL2026':
+    if not check_admin_auth():
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
     
     machine_state = MachineState.get_instance()
@@ -1100,8 +1114,7 @@ def admin_api_category_volumes():
 @app.route('/api/admin/taste-amount', methods=['GET', 'POST'])
 def admin_api_taste_amount():
     """Admin API endpoint to get/set taste amount"""
-    admin_password = request.cookies.get('admin_password')
-    if admin_password != 'COCKTAIL2026':
+    if not check_admin_auth():
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
     
     machine_state = MachineState.get_instance()
@@ -1144,8 +1157,7 @@ def admin_api_taste_amount():
 @app.route('/admin-dashboard', methods=['GET'])
 def admin_dashboard():
     # Simple password check for admin access
-    admin_password = request.cookies.get('admin_password')
-    if admin_password != 'COCKTAIL2026':
+    if not check_admin_auth():
         flash('Unauthorized. Admin access only. Contact event organizer.', 'error')
         return redirect(url_for('menu'))
     
