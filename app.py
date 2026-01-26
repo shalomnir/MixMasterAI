@@ -102,6 +102,9 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
 
+from flask_cors import CORS
+CORS(app, supports_credentials=True)  # Enable CORS for all routes
+
 db.init_app(app)
 
 login_manager = LoginManager()
@@ -792,6 +795,19 @@ def api_status():
     machine_state = MachineState.get_instance()
     return jsonify({
         'is_pouring': machine_state.is_pouring
+    })
+
+
+@app.route('/api/settings')
+def get_global_settings():
+    """Get global machine settings (volumes, etc.)"""
+    machine_state = MachineState.get_instance()
+    return jsonify({
+        'status': 'success',
+        'classic_target_vol': machine_state.classic_target_vol,
+        'highball_target_vol': machine_state.highball_target_vol,
+        'shot_target_vol': machine_state.shot_target_vol,
+        'taste_amount_ml': machine_state.taste_amount_ml
     })
 
 

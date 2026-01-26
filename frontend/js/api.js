@@ -262,6 +262,44 @@ class CocktailAPI {
     async adminUpdateMachineState(data) {
         return this.put('/api/admin/machine-state', data);
     }
+
+    // --- Legacy / Compatibility Admin Endpoints ---
+
+    async adminUpdate(entity, id, field, value) {
+        return this.post('/api/admin/update', { entity, id, field, value });
+    }
+
+    async adminGetCategoryVolumes() {
+        return this.get('/api/admin/category-volumes');
+    }
+
+    async adminUpdateCategoryVolume(category, volume) {
+        return this.post('/api/admin/category-volumes', { category, volume });
+    }
+
+    async adminGetTasteAmount() {
+        return this.get('/api/admin/taste-amount');
+    }
+
+    async adminUpdateTasteAmount(amount) {
+        return this.post('/api/admin/taste-amount', { taste_amount_ml: amount });
+    }
+
+    async adminSaveRecipe(recipeData) {
+        return this.post('/api/admin/recipe/save', recipeData);
+    }
+
+    async adminSaveUser(userData) {
+        return this.post('/api/admin/user/save', userData);
+    }
+
+    async adminAction(action, id = null) {
+        return this.post('/api/admin/action', { action, id });
+    }
+
+    async getSettings() {
+        return this.get('/api/settings');
+    }
 }
 
 // Create global API instance

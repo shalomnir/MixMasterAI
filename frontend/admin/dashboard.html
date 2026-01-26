@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Admin Dashboard - AI Cocktail Mixer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&display=swap');
+
+        body {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* Toast Animation */
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast-enter {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+
+        /* Modal Backdrop */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+        }
+
+        /* Autosave Spinner */
+        .saving-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+    </style>
+    <!-- API Client -->
+    <script src="../js/api.js"></script>
+    <script>
+        // Auth Check
+        if (!api.isAuthenticated()) {
+            window.location.href = '../index.html';
+        }
+
+        // Admin Check (optional, backend enforces it too)
+        // const user = api.getUser();
+        // if (!user || user.nickname !== 'Admin2001') {
+        //    alert('Unauthorized');
+        //    window.location.href = '../menu.html';
+        // }
+    </script>
+</head>
+
+<body class="bg-slate-950 text-slate-100 min-h-screen selection:bg-pink-500 selection:text-white">
+
+    <!-- Sticky Header -->
+    <header class="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 shadow-lg">
+        <div class="container mx-auto px-4 h-16 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-2 h-8 bg-gradient-to-b from-pink-500 to-violet-600 rounded-full shadow-[0_0_10px_rgba(236,72,153,0.5)]">
+                </div>
+                <div>
+                    <h1
+                        class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+                        Admin Panel
+                    </h1>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <div class="hidden md:block text-right">
+                    <p class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Logged In As</p>
+                    <p class="text-sm font-bold text-slate-200" id="admin-nickname">Admin</p>
+                </div>
+                <button onclick="api.logout()"
+                    class="text-xs text-red-400 hover:text-red-300 font-bold border border-red-900/30 bg-red-900/10 px-3 py-1.5 rounded-lg transition">Logout</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Floating Toast Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Main Content -->
+    <main class="container mx-auto p-4 md:p-6 pb-20 max-w-7xl">
+        <div id="loading-overlay" class="text-center py-20">
+            <div class="saving-indicator w-8 h-8 border-4 mb-4"></div>
+            <p class="text-slate-400">Loading Dashboard...</p>
+        </div>
+
+        <div id="dashboard-content" class="space-y-10 hidden">
+
+            <!-- Header Controls (Refresh) -->
+            <div class="flex justify-end -mt-16 mb-10 relative z-50 pointer-events-none">
+                <div class="pointer-events-auto">
+                    <button onclick="window.location.reload()"
+                        class="p-2 bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-700 hover:border-slate-500 shadow-lg transition-all"
+                        title="Refresh Dashboard">
+                        🔄
+                    </button>
+                </div>
+            </div>
+
+            <!-- Pump Configuration Section -->
+            <section>
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-xl font-bold text-slate-100 flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-pink-500 rounded-full shadow-[0_0_10px_rgba(236,72,153,0.5)]"></span>
+                        Pump Configuration
+                    </h3>
+                    <span
+                        class="text-xs font-bold px-3 py-1 bg-slate-800 text-slate-400 rounded-full border border-slate-700"
+                        id="pump-count">8 Pumps Installed</span>
+                </div>
+
+                <div class="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden" id="pumps-list">
+                    <!-- Pumps rendered via JS -->
+                </div>
+            </section>
+
+            <!-- Global Settings Section  -->
+            <section>
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-xl font-bold text-slate-100 flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-cyan-500 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.5)]"></span>
+                        Global Settings
+                    </h3>
+                </div>
+
+                <div class="bg-slate-900 rounded-xl border border-slate-800 p-6 transition-all hover:border-slate-600">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <!-- Classic Volume -->
+                        <div>
+                            <label class="block text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+                                <span>🍸</span>
+                                Classic (ml)
+                            </label>
+                            <div class="relative">
+                                <input type="number" id="classic-volume-input"
+                                    class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white text-lg font-bold focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/50 transition-all"
+                                    placeholder="110" onchange="updateCategoryVolume('classic', this.value)">
+                                <span
+                                    class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-semibold">ml</span>
+                                <span id="classic-volume-indicator"
+                                    class="absolute right-14 top-1/2 -translate-y-1/2"></span>
+                            </div>
+                        </div>
+
+                        <!-- Highball Volume -->
+                        <div>
+                            <label class="block text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+                                <span>🥤</span>
+                                Highball (ml)
+                            </label>
+                            <div class="relative">
+                                <input type="number" id="highball-volume-input"
+                                    class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white text-lg font-bold focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/50 transition-all"
+                                    placeholder="90" onchange="updateCategoryVolume('highball', this.value)">
+                                <span
+                                    class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-semibold">ml</span>
+                                <span id="highball-volume-indicator"
+                                    class="absolute right-14 top-1/2 -translate-y-1/2"></span>
+                            </div>
+                        </div>
+
+                        <!-- Shot Volume -->
+                        <div>
+                            <label class="block text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+                                <span>🥃</span>
+                                Shot (ml)
+                            </label>
+                            <div class="relative">
+                                <input type="number" id="shot-volume-input"
+                                    class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white text-lg font-bold focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/50 transition-all"
+                                    placeholder="40" onchange="updateCategoryVolume('shot', this.value)">
+                                <span
+                                    class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-semibold">ml</span>
+                                <span id="shot-volume-indicator"
+                                    class="absolute right-14 top-1/2 -translate-y-1/2"></span>
+                            </div>
+                        </div>
+
+                        <!-- Taste Amount -->
+                        <div>
+                            <label class="block text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+                                <span>🥄</span>
+                                Taste (ml)
+                            </label>
+                            <div class="relative">
+                                <input type="number" id="taste-amount-input" min="10" max="100" step="5"
+                                    class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white text-lg font-bold focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/50 transition-all"
+                                    placeholder="30" onchange="updateTasteAmount(this.value)">
+                                <span
+                                    class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-semibold">ml</span>
+                                <span id="taste-amount-indicator"
+                                    class="absolute right-14 top-1/2 -translate-y-1/2"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Recipe Management Section (Modal Based) -->
+            <section>
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-xl font-bold text-slate-100 flex items-center gap-3">
+                        <span
+                            class="w-1.5 h-6 bg-violet-500 rounded-full shadow-[0_0_10px_rgba(139,92,246,0.5)]"></span>
+                        Recipe Management
+                    </h3>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="recipe-list">
+                    <!-- Recipes rendered via JS -->
+                </div>
+            </section>
+
+            <!-- User Management Section -->
+            <section>
+                <div class="bg-slate-900 rounded-xl border border-slate-800 shadow-sm overflow-hidden">
+                    <div class="p-6 border-b border-slate-800 flex justify-between items-center flex-wrap gap-4">
+                        <h3 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                            <span
+                                class="w-1.5 h-5 bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)]"></span>
+                            Registered Users
+                        </h3>
+
+                        <!-- System Actions -->
+                        <div class="flex gap-3">
+                            <button
+                                onclick="confirmSystemAction('reset_points', 'Reset ALL users to 0 points? This will wipe the leaderboard!')"
+                                class="text-xs font-bold text-yellow-500 hover:text-yellow-400 bg-yellow-900/20 hover:bg-yellow-900/40 border border-yellow-900/50 px-3 py-1.5 rounded-lg transition-colors">
+                                ⚠️ Reset Points
+                            </button>
+                            <button
+                                onclick="confirmSystemAction('delete_all_users', 'DELETE ALL USERS? This cannot be undone!')"
+                                class="text-xs font-bold text-red-500 hover:text-red-400 bg-red-900/20 hover:bg-red-900/40 border border-red-900/50 px-3 py-1.5 rounded-lg transition-colors">
+                                ☠️ Delete All Users
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-950 text-slate-400 font-medium border-b border-slate-800">
+                                <tr>
+                                    <th class="px-6 py-3">Nickname</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800" id="user-table-body">
+                                <!-- Users rendered via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Recipe Modal -->
+    <div id="recipe-modal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 modal-backdrop transition-opacity" onclick="closeRecipeModal()"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-lg p-4">
+            <div
+                class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                        <span class="text-2xl" id="recipe-modal-icon">✨</span>
+                        <span id="recipe-modal-title">New Recipe</span>
+                    </h3>
+                    <button onclick="closeRecipeModal()"
+                        class="text-slate-500 hover:text-white transition-colors">✕</button>
+                </div>
+                <div class="p-6 overflow-y-auto custom-scrollbar space-y-5">
+                    <input type="hidden" id="modal-recipe-id">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Recipe Name</label>
+                        <input type="text" id="modal-recipe-name" placeholder="e.g. Mojito"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Description</label>
+                        <textarea id="modal-recipe-desc" rows="2" placeholder="Flavor profile..."
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-300 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Category</label>
+                        <select id="modal-recipe-category"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500">
+                            <option value="classic">🍸 Classic Cocktails (no soda)</option>
+                            <option value="highball">🥤 Highball (long drinks with soda/tonic)</option>
+                            <option value="shot">🥃 Shot/Chaser</option>
+                        </select>
+                    </div>
+                    <div class="bg-slate-950/50 border border-slate-800 rounded-lg p-3">
+                        <p class="text-xs text-slate-400 flex items-start gap-2">
+                            <span class="text-green-500">ⓘ</span>
+                            <span><strong class="text-slate-300">Points are auto-calculated:</strong> 1 point per 1ml of
+                                alcohol poured. No manual editing needed.</span>
+                        </p>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-3">Ingredients (ml)</label>
+                        <div class="grid grid-cols-2 gap-2" id="modal-ingredients-container">
+                            <!-- Pump ingredients rendered via JS -->
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-slate-800 flex gap-3 bg-slate-900/50">
+                    <button type="button" id="modal-delete-btn" onclick="deleteRecipe()"
+                        class="hidden px-4 py-3 text-red-500 hover:bg-red-900/20 rounded-xl font-bold text-sm transition-colors border border-transparent hover:border-red-900/30">🗑️
+                        Delete</button>
+                    <div class="flex-1"></div>
+                    <button onclick="closeRecipeModal()"
+                        class="px-6 py-3 text-slate-400 hover:text-white font-semibold text-sm transition-colors">Cancel</button>
+                    <button onclick="saveRecipe()" id="modal-save-btn"
+                        class="px-8 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-xl font-bold text-sm shadow-[0_0_15px_rgba(139,92,246,0.4)] transition-all">Save
+                        Recipe</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pump Modal -->
+    <div id="pump-modal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 modal-backdrop transition-opacity" onclick="closePumpModal()"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-md p-4">
+            <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+                <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                        <span class="text-2xl">🔧</span>
+                        <span>Edit Pump <span id="modal-pump-number" class="text-pink-500"></span></span>
+                    </h3>
+                    <button onclick="closePumpModal()"
+                        class="text-slate-500 hover:text-white transition-colors">✕</button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <input type="hidden" id="modal-pump-id">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Ingredient Name</label>
+                        <div class="relative">
+                            <input type="text" id="modal-pump-name" placeholder="e.g. Vodka"
+                                class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">GPIO Pin</label>
+                            <input type="number" id="modal-pump-pin" placeholder="#"
+                                class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white font-mono focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Sec/50ml</label>
+                            <input type="number" id="modal-pump-seconds" step="0.1" placeholder="0.0"
+                                class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white font-mono focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">🍺 Contains Alcohol</label>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="modal-pump-alcohol" class="sr-only peer">
+                            <div
+                                class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500">
+                            </div>
+                            <span
+                                class="ml-3 text-sm text-slate-400 peer-checked:text-amber-400 transition-colors select-none">No</span>
+                        </label>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">🔌 Virtual Pump (No
+                            GPIO)</label>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="modal-pump-virtual" class="sr-only peer">
+                            <div
+                                class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500">
+                            </div>
+                            <span
+                                class="ml-3 text-sm text-slate-400 peer-checked:text-blue-400 transition-colors select-none">No</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-slate-800 flex gap-3 bg-slate-900/50">
+                    <div class="flex-1"></div>
+                    <button onclick="closePumpModal()"
+                        class="px-6 py-3 text-slate-400 hover:text-white font-semibold text-sm transition-colors">Cancel</button>
+                    <button onclick="savePump()"
+                        class="px-8 py-3 bg-pink-600 hover:bg-pink-500 text-white rounded-xl font-bold text-sm shadow-[0_0_15px_rgba(236,72,153,0.4)] transition-all">Save
+                        Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal" class="fixed inset-0 z-[100] hidden">
+        <div class="absolute inset-0 modal-backdrop transition-opacity" onclick="closeConfirmModal()"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-sm p-4">
+            <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6 text-center">
+                <div
+                    class="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/30">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <h3 class="text-lg font-bold text-white mb-2">Are you sure?</h3>
+                <p id="confirm-modal-message" class="text-sm text-slate-400 mb-6">This action cannot be undone.</p>
+                <div class="flex gap-3">
+                    <button onclick="closeConfirmModal()"
+                        class="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold transition border border-slate-700">Cancel</button>
+                    <button id="confirm-modal-btn"
+                        class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl font-semibold transition shadow-[0_0_15px_rgba(220,38,38,0.4)]">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let pumpsData = [];
+        let recipesData = [];
+        let usersData = [];
+
+        async function initDashboard() {
+            try {
+                // Load user info
+                const user = api.getUser();
+                if (user && user.nickname) document.getElementById('admin-nickname').textContent = user.nickname;
+
+                // Load all data
+                const [pumpsRes, recipesRes, usersRes, settingsRes] = await Promise.all([
+                    api.adminGetPumps(),
+                    api.adminGetRecipes(),
+                    api.adminGetUsers(),
+                    api.getSettings()
+                ]);
+
+                pumpsData = pumpsRes.pumps;
+                recipesData = recipesRes.recipes;
+                usersData = usersRes.users;
+
+                renderPumps(pumpsData);
+                renderRecipes(recipesData);
+                renderUsers(usersData);
+                renderSettings(settingsRes);
+
+                document.getElementById('loading-overlay').classList.add('hidden');
+                document.getElementById('dashboard-content').classList.remove('hidden');
+
+            } catch (error) {
+                console.error("Dashboard Init Error", error);
+                alert('Failed to load dashboard data. Ensure backend is running and you are logged in.');
+            }
+        }
+
+        // --- Render Functions ---
+
+        function renderPumps(pumps) {
+            const container = document.getElementById('pumps-list');
+            document.getElementById('pump-count').textContent = `${pumps.length} Pumps Installed`;
+
+            container.innerHTML = pumps.map(pump => `
+                <div class="pump-row flex items-center justify-between px-6 py-4 border-b border-slate-800 last:border-b-0 hover:bg-slate-800/50 transition-all cursor-pointer group"
+                    onclick="openPumpModal(${pump.id})">
+                    <div class="flex items-center gap-4 flex-1 min-w-0">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border 
+                            ${pump.is_active ? 'bg-green-500/10 text-green-500 border-green-500/30' : 'bg-slate-800 text-slate-500 border-slate-700'}">
+                            ${pump.id}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold text-slate-200 truncate">
+                                ${pump.ingredient_name || 'Empty Pump'}
+                            </p>
+                        </div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+                        <input type="checkbox" ${pump.is_active ? 'checked' : ''}
+                            onchange="autoSavePump(${pump.id}, 'is_active', this.checked)"
+                            class="sr-only peer">
+                        <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                    </label>
+                </div>
+            `).join('');
+        }
+
+        function renderRecipes(recipes) {
+            const container = document.getElementById('recipe-list');
+            // Add existing recipes
+            const recipeCards = recipes.map(recipe => `
+                <div class="bg-slate-900 rounded-xl border border-slate-800 p-5 shadow-sm hover:border-violet-500/50 hover:shadow-violet-500/10 cursor-pointer transition-all group relative"
+                    onclick='openRecipeModal(${JSON.stringify(recipe).replace(/'/g, "\\'")})'>
+                    <div class="flex justify-between items-start mb-3">
+                        <h4 class="text-lg font-bold text-slate-200 group-hover:text-white transition-colors">${recipe.name}</h4>
+                    </div>
+                    <p class="text-xs text-slate-500 truncate mb-4">${recipe.description || 'No description'}</p>
+                    <div class="flex flex-wrap gap-1">
+                        ${renderIngredients(recipe.ingredients_json, recipe.ingredients)}
+                    </div>
+                </div>
+            `).join('');
+
+            // Add "Create New" card
+            const createCard = `
+                <div onclick="openRecipeModal(null)"
+                    class="bg-slate-900/50 rounded-xl border-2 border-dashed border-slate-700 hover:border-violet-500/50 hover:bg-slate-800 transition-all cursor-pointer flex flex-col items-center justify-center p-6 min-h-[160px] group">
+                    <div class="w-12 h-12 rounded-full bg-slate-800 group-hover:bg-violet-500/20 flex items-center justify-center mb-3 transition-colors">
+                        <span class="text-2xl text-slate-400 group-hover:text-violet-400 font-light">+</span>
+                    </div>
+                    <p class="text-sm font-bold text-slate-400 group-hover:text-violet-300">Create New Recipe</p>
+                </div>
+            `;
+
+            container.innerHTML = recipeCards + createCard;
+        }
+
+        function renderIngredients(jsonStr, obj) {
+            // Support both formats if API returns one or other
+            let ingredients = obj;
+            if (!ingredients && jsonStr) {
+                try { ingredients = JSON.parse(jsonStr); } catch (e) { }
+            }
+            if (!ingredients) return '';
+
+            return Object.entries(ingredients).map(([pumpId, amount]) => {
+                const pump = pumpsData.find(p => p.id == pumpId);
+                const name = pump ? pump.ingredient_name : `#${pumpId}`;
+                return `
+                    <span class="text-[10px] bg-slate-950 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800">
+                        ${name}: ${amount}ml
+                    </span>
+                `;
+            }).join('');
+        }
+
+        function renderUsers(users) {
+            const container = document.getElementById('user-table-body');
+            if (users.length === 0) {
+                container.innerHTML = '<tr><td class="p-8 text-center text-slate-500 text-sm">No users yet.</td></tr>';
+                return;
+            }
+            container.innerHTML = users.map(user => `
+                <tr class="hover:bg-slate-800/50 transition-colors cursor-pointer group user-row"
+                    onclick="openUserModal(this)" data-id="${user.id}" data-nickname="${user.nickname}" data-points="${user.points}">
+                    <td class="px-6 py-4">
+                        <div class="font-semibold text-slate-200 flex items-center justify-between">
+                            <span>${user.nickname}</span>
+                            <span class="text-slate-600 group-hover:text-blue-400 transition-colors text-xs">Edit ›</span>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderSettings(settings) {
+            document.getElementById('classic-volume-input').value = settings.classic_target_vol;
+            document.getElementById('highball-volume-input').value = settings.highball_target_vol;
+            document.getElementById('shot-volume-input').value = settings.shot_target_vol;
+            document.getElementById('taste-amount-input').value = settings.taste_amount_ml;
+        }
+
+        // --- Logic & Actions ---
+
+        async function autoSavePump(id, field, value) {
+            // Toggles active state immediately visually, but sends update
+            try {
+                // If checkbox, value is bool. If text/number, value is correct type
+                const val2 = (field === 'is_active' || field === 'is_alcohol' || field === 'is_virtual') ? (value ? 1 : 0) : value;
+
+                await api.adminUpdate('pump', id, field, val2);
+                showToast('Pump updated');
+                if (field === 'is_active') {
+                    // Refresh pumps to update visual state fully (colors etc)
+                    const res = await api.adminGetPumps();
+                    pumpsData = res.pumps;
+                    renderPumps(pumpsData);
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('Update failed: ' + e.message, 'error');
+            }
+        }
+
+        function updateCategoryVolume(category, value) {
+            api.adminUpdateCategoryVolume(category, parseInt(value)).then(() => {
+                showToast(`${category} volume saved`);
+            }).catch(e => showToast(e.message, 'error'));
+        }
+
+        function updateTasteAmount(value) {
+            api.adminUpdateTasteAmount(parseInt(value)).then(() => {
+                showToast(`Taste amount saved`);
+            }).catch(e => showToast(e.message, 'error'));
+        }
+
+        // --- Modals ---
+
+        function openPumpModal(pumpId) {
+            const pump = pumpsData.find(p => p.id == pumpId);
+            if (!pump) return;
+
+            document.getElementById('modal-pump-id').value = pump.id;
+            document.getElementById('modal-pump-number').textContent = pump.id;
+            document.getElementById('modal-pump-name').value = pump.ingredient_name;
+            document.getElementById('modal-pump-pin').value = pump.pin_number || '';
+            document.getElementById('modal-pump-seconds').value = pump.seconds_per_50ml || '';
+            document.getElementById('modal-pump-alcohol').checked = pump.is_alcohol;
+            document.getElementById('modal-pump-virtual').checked = pump.is_virtual;
+
+            document.getElementById('pump-modal').classList.remove('hidden');
+        }
+
+        function closePumpModal() {
+            document.getElementById('pump-modal').classList.add('hidden');
+        }
+
+        async function savePump() {
+            const id = document.getElementById('modal-pump-id').value;
+            try {
+                await api.adminUpdate('pump', id, 'ingredient_name', document.getElementById('modal-pump-name').value);
+                await api.adminUpdate('pump', id, 'pin_number', document.getElementById('modal-pump-pin').value);
+                await api.adminUpdate('pump', id, 'seconds_per_50ml', document.getElementById('modal-pump-seconds').value);
+                await api.adminUpdate('pump', id, 'is_alcohol', document.getElementById('modal-pump-alcohol').checked ? 1 : 0);
+                await api.adminUpdate('pump', id, 'is_virtual', document.getElementById('modal-pump-virtual').checked ? 1 : 0);
+
+                showToast('Pump saved successfully');
+                closePumpModal();
+                // reload
+                const res = await api.adminGetPumps();
+                pumpsData = res.pumps;
+                renderPumps(pumpsData);
+            } catch (e) {
+                showToast(e.message, 'error');
+            }
+        }
+
+        function openRecipeModal(recipe) {
+            const modal = document.getElementById('recipe-modal');
+            const title = document.getElementById('recipe-modal-title');
+            const btn = document.getElementById('modal-save-btn');
+            const delBtn = document.getElementById('modal-delete-btn');
+
+            document.getElementById('modal-recipe-id').value = recipe ? recipe.id : '';
+            document.getElementById('modal-recipe-name').value = recipe ? recipe.name : '';
+            document.getElementById('modal-recipe-desc').value = recipe ? recipe.description || '' : '';
+            document.getElementById('modal-recipe-category').value = recipe ? (recipe.category || 'classic') : 'classic';
+
+            // Show ingredients inputs
+            const container = document.getElementById('modal-ingredients-container');
+            container.innerHTML = pumpsData.map(pump => {
+                let amount = '';
+                if (recipe && recipe.ingredients) {
+                    // Try parsing if string, or use obj
+                    let ings = recipe.ingredients;
+                    if (typeof ings === 'string') try { ings = JSON.parse(ings); } catch (e) { }
+                    amount = ings[pump.id] || '';
+                }
+
+                return `
+                    <div class="flex items-center gap-2 bg-slate-950 p-2 rounded-lg border border-slate-800 ${!pump.is_active ? 'opacity-40' : ''}">
+                        <span class="w-6 h-6 flex items-center justify-center bg-slate-800 rounded-full text-[10px] font-bold text-slate-400">${pump.id}</span>
+                        <span class="text-xs truncate flex-1 text-slate-400">${pump.ingredient_name}</span>
+                        <input type="number" id="modal-pump-${pump.id}" placeholder="0" min="0" step="5" max="500" value="${amount}"
+                            class="w-16 bg-slate-800 border-none rounded px-1 py-1 text-sm text-center text-white focus:ring-1 focus:ring-violet-500 placeholder-slate-600">
+                    </div>
+                `;
+            }).join('');
+
+            if (recipe) {
+                title.textContent = 'Edit Recipe';
+                btn.textContent = 'Save Changes';
+                delBtn.classList.remove('hidden');
+            } else {
+                title.textContent = 'Create New Recipe';
+                btn.textContent = 'Create Recipe';
+                delBtn.classList.add('hidden');
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeRecipeModal() {
+            document.getElementById('recipe-modal').classList.add('hidden');
+        }
+
+        async function saveRecipe() {
+            const id = document.getElementById('modal-recipe-id').value;
+            const name = document.getElementById('modal-recipe-name').value;
+
+            const ingredients = {};
+            pumpsData.forEach(p => {
+                const el = document.getElementById(`modal-pump-${p.id}`);
+                if (el && el.value > 0) ingredients[p.id] = parseFloat(el.value);
+            });
+
+            const data = {
+                id: id ? parseInt(id) : null,
+                name,
+                description: document.getElementById('modal-recipe-desc').value,
+                category: document.getElementById('modal-recipe-category').value,
+                ingredients
+            };
+
+            try {
+                await api.adminSaveRecipe(data);
+                showToast('Recipe saved');
+                closeRecipeModal();
+                const res = await api.adminGetRecipes();
+                renderRecipes(res.recipes);
+            } catch (e) {
+                showToast(e.message, 'error');
+            }
+        }
+
+        async function deleteRecipe() {
+            const id = document.getElementById('modal-recipe-id').value;
+            if (!confirm("Delete this recipe?")) return;
+            try {
+                await api.adminAction('delete_recipe', parseInt(id));
+                showToast('Recipe deleted');
+                closeRecipeModal();
+                const res = await api.adminGetRecipes();
+                renderRecipes(res.recipes);
+            } catch (e) {
+                showToast(e.message, 'error');
+            }
+        }
+
+        // --- System Actions ---
+
+        let pendingAction = null;
+        let pendingActionId = null;
+
+        function confirmSystemAction(action, message, id = null) {
+            pendingAction = action;
+            pendingActionId = id;
+            document.getElementById('confirm-modal-message').textContent = message;
+            document.getElementById('confirm-modal').classList.remove('hidden');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirm-modal').classList.add('hidden');
+            pendingAction = null;
+        }
+
+        document.getElementById('confirm-modal-btn').addEventListener('click', async () => {
+            if (!pendingAction) return;
+
+            try {
+                await api.adminAction(pendingAction, pendingActionId);
+                showToast('Action successful');
+                closeConfirmModal();
+                // Refresh all
+                initDashboard();
+            } catch (e) {
+                showToast(e.message, 'error');
+                closeConfirmModal();
+            }
+        });
+
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const div = document.createElement('div');
+            const color = type === 'success' ? 'border-green-500' : 'border-red-500';
+            const icon = type === 'success' ? '✅' : '⚠️';
+            div.className = `toast-enter pointer-events-auto bg-slate-800 text-white border-l-4 ${color} shadow-2xl rounded-r-lg p-4 flex items-center gap-3 min-w-[300px] max-w-sm`;
+            div.innerHTML = `<span class="text-lg">${icon}</span><p class="text-sm font-medium text-slate-200">${msg}</p>`;
+            container.appendChild(div);
+            setTimeout(() => div.remove(), 4000);
+        }
+
+        // Start
+        initDashboard();
+
+    </script>
+</body>
+
+</html>
