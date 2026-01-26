@@ -12,6 +12,7 @@ services:
     volumes:
       - ./instance:/app/instance
       - /sys:/sys
+      - ./app.py:/app/app.py # Mount root app.py (source of truth) to container
     networks:
       - app-network
     restart: unless-stopped
