@@ -9,9 +9,10 @@
 const API_BASE_URL = 'https://api.mixmasterai.app';
 
 class CocktailAPI {
-    constructor() {
-        // Always use the production API URL
-        this.baseUrl = API_BASE_URL;
+    constructor(baseUrl = '') {
+        // Use provided baseUrl, or window.API_BASE_URL, or the hardcoded production URL
+        // This ensures we NEVER fall back to empty string or current window origin
+        this.baseUrl = baseUrl || window.API_BASE_URL || API_BASE_URL;
         this.tokenKey = 'cocktail_auth_token';
         this.userKey = 'cocktail_user';
     }
