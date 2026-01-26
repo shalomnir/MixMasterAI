@@ -64,8 +64,8 @@ class CocktailAPI {
             ...options.headers
         };
 
-        // Add auth token if available
-        const token = this.getToken();
+        // Add auth token if available (Prioritize sessionStorage for transient admin)
+        const token = sessionStorage.getItem('cocktail_auth_token') || this.getToken();
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
         }

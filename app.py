@@ -1111,6 +1111,92 @@ def admin_api_category_volumes():
         db.session.rollback()
         return jsonify({'status': 'error', 'message': 'Database error'}), 500
 
+@app.route('/api/settings', methods=['GET'])
+def get_global_settings():
+    """Get global settings (volumes, taste amount)"""
+    machine_state = MachineState.get_instance()
+    return jsonify({
+        'classic_target_vol': machine_state.classic_target_vol,
+        'highball_target_vol': machine_state.highball_target_vol,
+        'shot_target_vol': machine_state.shot_target_vol,
+        'taste_amount_ml': machine_state.taste_amount_ml,
+        'is_pouring': machine_state.is_pouring
+    })
+
+# --- Admin GET Endpoints ---
+
+@app.route('/api/admin/pumps', methods=['GET'])
+def admin_api_get_pumps():
+    if not check_admin_auth():
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+    
+    pumps = Pump.query.all()
+    # Format for Admin UI
+    pump_list = []
+    for p in pumps:
+        pump_list.append({
+            'id': p.id,
+            'ingredient_name': p.ingredient_name,
+            'pin_number': p.pin_number,
+            'is_alcohol': p.is_alcohol,
+            'is_active': p.is_active,
+            'is_virtual': p.is_virtual,
+            'seconds_per_50ml': p.seconds_per_50ml
+        })
+    return jsonify({'pumps': pump_list})
+
+@app.route('/api/admin/recipes', methods=['GET', 'POST'])
+def admin_api_recipes():
+    if not check_admin_auth():
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+
+    if request.method == 'POST':
+        # Create new recipe logic would go here, effectively covered by /save
+        pass
+        
+    recipes = Recipe.query.all()
+    recipe_list = []
+    for r in recipes:
+        recipe_list.append({
+            'id': r.id,
+            'name': r.name,
+            'description': r.description,
+            'category': r.category,
+            'ingredients': r.get_ingredients(), # returns dict
+            'ingredients_json': r.ingredients_json,
+            'points_reward': r.points_reward
+        })
+    return jsonify({'recipes': recipe_list})
+
+@app.route('/api/admin/users', methods=['GET'])
+def admin_api_users():
+    if not check_admin_auth():
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+        
+    users = User.query.all()
+    user_list = [{'id': u.id, 'nickname': u.nickname, 'points': u.points, 'is_admin': (u.nickname == 'Admin2001')} for u in users]
+    return jsonify({'users': user_list})
+
+@app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
+def admin_api_delete_user(user_id):
+    if not check_admin_auth():
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+        
+    user = User.query.get_or_404(user_id)
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({'status': 'success'})
+
+@app.route('/api/admin/recipes/<int:recipe_id>', methods=['DELETE'])
+def admin_api_delete_recipe(recipe_id):
+    if not check_admin_auth():
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+        
+    recipe = Recipe.query.get_or_404(recipe_id)
+    db.session.delete(recipe)
+    db.session.commit()
+    return jsonify({'status': 'success'})
+
 @app.route('/api/admin/taste-amount', methods=['GET', 'POST'])
 def admin_api_taste_amount():
     """Admin API endpoint to get/set taste amount"""
