@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: cocktail-mixer-backend
     ports:
       - "5000:5000"
@@ -10,9 +12,9 @@ services:
     devices:
       - /dev/gpiomem:/dev/gpiomem
     volumes:
+      - ./backend:/app
       - ./instance:/app/instance
       - /sys:/sys
-      - ./app.py:/app/app.py # Mount root app.py (source of truth) to container
     networks:
       - app-network
     restart: unless-stopped

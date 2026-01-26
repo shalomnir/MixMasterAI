@@ -1,6 +1,6 @@
 import os
 import re
-from flask import Flask, render_template, redirect, url_for, flash, request, jsonify, make_response
+from flask import Flask, redirect, url_for, flash, request, jsonify, make_response
 import json
 from datetime import datetime, timedelta
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
@@ -105,7 +105,7 @@ app.config['SESSION_COOKIE_SECURE'] = True # Secure required for None
 
 from flask_cors import CORS
 # Allow both localhost (dev) and production app
-CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": ["http://localhost:5000", "https://mixmasterai.app", "https://api.mixmasterai.app"]}})
+CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": ["http://localhost:5000", "http://127.0.0.1:5500", "https://mixmasterai.app", "https://api.mixmasterai.app"]}})
 
 db.init_app(app)
 
@@ -119,12 +119,12 @@ def check_admin_auth():
     auth_header = request.headers.get('Authorization')
     if auth_header == 'Bearer admin-session-token':
         return True
-        
+    
     # 2. Check Legacy Cookie
     admin_password = request.cookies.get('admin_password')
     if admin_password == 'COCKTAIL2026':
         return True
-        
+
     # 3. Check Flask Login (if User is Admin)
     if current_user.is_authenticated and getattr(current_user, 'is_admin', False):
         return True
@@ -295,10 +295,7 @@ def index():
         # Use validation function
         validated_nickname, error = validate_nickname(nickname)
         if error:
-            if is_ajax:
-                return jsonify({'status': 'error', 'message': error}), 400
-            flash(error, 'error')
-            return redirect(url_for('index'))
+            return jsonify({'status': 'error', 'message': error}), 400
         
         try:
             # Check if nickname already exists - PREVENT DUPLICATE
@@ -307,10 +304,7 @@ def index():
             if existing_user:
                 # Return error for duplicate nickname
                 error_msg = 'Nickname already taken. Please choose another one.'
-                if is_ajax:
-                    return jsonify({'status': 'error', 'message': error_msg}), 400
-                flash(error_msg, 'error')
-                return redirect(url_for('index'))
+                return jsonify({'status': 'error', 'message': error_msg}), 400
             else:
                 # Create new user with auto-generated recovery key
                 recovery_key = User.generate_recovery_key()
@@ -327,36 +321,33 @@ def index():
         except SQLAlchemyError as e:
             db.session.rollback()
             error_msg = 'Database error. Please try again.'
-            if is_ajax:
-                return jsonify({'status': 'error', 'message': error_msg}), 500
-            flash(error_msg, 'error')
-            return redirect(url_for('index'))
+            return jsonify({'status': 'error', 'message': error_msg}), 500
         
         # Redirect to menu (session is already set by login_user)
-        if is_ajax:
-            return jsonify({'status': 'success', 'redirect': url_for('menu')})
-        return redirect(url_for('menu'))
+        # Redirect to menu (session is already set by login_user)
+        return jsonify({'status': 'success', 'redirect': url_for('menu')})
             
-    return render_template('index.html', now=datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
+    return jsonify({'status': 'error', 'message': 'GET not supported for index'}), 405
 
 @app.route('/recovery', methods=['GET', 'POST'])
 def recovery():
     """Account recovery using recovery key"""
+    if request.method != 'POST':
+         return jsonify({'status': 'error', 'message': 'Method not allowed'}), 405
+
     # If already logged in, redirect to menu
     if current_user.is_authenticated:
-        return redirect(url_for('menu'))
+        return jsonify({'status': 'success', 'redirect': url_for('menu')})
     
     if request.method == 'POST':
         recovery_key = request.form.get('recovery_key', '').strip().upper()
         
         if not recovery_key:
-            flash('Please enter a recovery key.', 'error')
-            return redirect(url_for('recovery'))
+            return jsonify({'status': 'error', 'message': 'Please enter a recovery key.'}), 400
         
         # Validate recovery key format (6 alphanumeric characters)
         if len(recovery_key) != 6 or not recovery_key.isalnum():
-            flash('Invalid recovery key format. Must be 6 alphanumeric characters.', 'error')
-            return redirect(url_for('recovery'))
+            return jsonify({'status': 'error', 'message': 'Invalid recovery key format.'}), 400
         
         try:
             # Find user by recovery key
@@ -368,17 +359,14 @@ def recovery():
                 from flask import session
                 session.permanent = True
                 
-                flash(f'Welcome back, {user.nickname}! Your session has been restored.', 'success')
-                return redirect(url_for('menu'))
+                return jsonify({'status': 'success', 'message': f'Welcome back, {user.nickname}!', 'redirect': url_for('menu')})
             else:
-                flash('Invalid recovery key. Please check with the admin.', 'error')
-                return redirect(url_for('recovery'))
+                 return jsonify({'status': 'error', 'message': 'Invalid recovery key.'}), 400
                 
         except SQLAlchemyError:
-            flash('Database error. Please try again.', 'error')
-            return redirect(url_for('recovery'))
+             return jsonify({'status': 'error', 'message': 'Database error.'}), 500
     
-    return render_template('recovery.html')
+    return jsonify({'status': 'error', 'message': 'Invalid request'}), 400
 
 @app.route('/menu')
 @login_required
@@ -389,13 +377,16 @@ def menu():
     shots = Recipe.query.filter_by(category='shot').all()
     
     machine_state = MachineState.get_instance()
-    return render_template(
-        'menu.html', 
-        classic_cocktails=classic_cocktails,
-        highballs=highballs,
-        shots=shots,
-        taste_amount_ml=machine_state.taste_amount_ml
-    )
+    machine_state = MachineState.get_instance()
+    # Converted to JSON output instead of render_template for purity, 
+    # though user typically accesses /menu via frontend. 
+    # For now, we will return data that the frontend would have needed.
+    return jsonify({
+        'classic_cocktails': [c.to_dict() for c in classic_cocktails],
+        'highballs': [c.to_dict() for c in highballs],
+        'shots': [s.to_dict() for c in shots],
+        'taste_amount_ml': machine_state.taste_amount_ml
+    })
 
 @app.route('/api/pumps')
 def get_pumps():
@@ -609,7 +600,8 @@ def pour_cocktail(recipe_id):
 def leaderboard():
     # Top 10 users (excluding Admin2001)
     users = User.query.filter(User.nickname != 'Admin2001').order_by(User.points.desc()).limit(10).all()
-    return render_template('leaderboard.html', users=users)
+    # return render_template('leaderboard.html', users=users)
+    return jsonify({'users': [u.to_dict() for u in users]})
 
 @app.route('/api/user/rank')
 @login_required
@@ -819,8 +811,8 @@ def api_status():
 
 
 @app.route('/api/settings')
-def get_global_settings():
-    """Get global machine settings (volumes, etc.)"""
+def get_machine_settings_api():
+    """Get global machine settings (volume limits, etc.)"""
     machine_state = MachineState.get_instance()
     return jsonify({
         'status': 'success',
@@ -1112,7 +1104,7 @@ def admin_api_category_volumes():
         return jsonify({'status': 'error', 'message': 'Database error'}), 500
 
 @app.route('/api/settings', methods=['GET'])
-def get_global_settings():
+def get_api_settings_new():
     """Get global settings (volumes, taste amount)"""
     machine_state = MachineState.get_instance()
     return jsonify({
@@ -1197,6 +1189,103 @@ def admin_api_delete_recipe(recipe_id):
     db.session.commit()
     return jsonify({'status': 'success'})
 
+@app.route('/api/admin/update', methods=['POST'])
+def admin_api_update_entity():
+    """Generic admin update endpoint for Pumps (legacy support)"""
+    if not check_admin_auth():
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+        
+    data = request.get_json()
+    entity_type = data.get('entity')
+    entity_id = data.get('id')
+    field = data.get('field')
+    value = data.get('value')
+    
+    try:
+        if entity_type == 'pump':
+            pump = Pump.query.get(int(entity_id))
+            if not pump:
+                return jsonify({'status': 'error', 'message': 'Pump not found'}), 404
+            
+            # Type conversion based on field
+            if field == 'pin_number':
+                value = int(value) if value else None
+            elif field in ['is_active', 'is_alcohol', 'is_virtual']:
+                value = bool(int(value))
+            elif field == 'seconds_per_50ml':
+                value = float(value)
+                
+            if hasattr(pump, field):
+                setattr(pump, field, value)
+                db.session.commit()
+                return jsonify({'status': 'success', 'message': 'Pump updated'})
+            else:
+                return jsonify({'status': 'error', 'message': 'Invalid field'}), 400
+                
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+        
+    return jsonify({'status': 'error', 'message': 'Invalid entity or request'}), 400
+
+@app.route('/api/admin/recipe/save', methods=['POST'])
+def admin_api_save_recipe():
+    """Create or Update Recipe"""
+    if not check_admin_auth():
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+        
+    data = request.get_json()
+    recipe_id = data.get('id')
+    name = data.get('name')
+    description = data.get('description')
+    category = data.get('category')
+    ingredients = data.get('ingredients') # Expecting dict {pump_id: ml}
+    
+    if not name or not ingredients:
+         return jsonify({'status': 'error', 'message': 'Name and ingredients required'}), 400
+         
+    try:
+        ingredients_json = json.dumps(ingredients)
+        
+        # Calculate points (1 point per 1 ml alcohol)
+        points_reward = 0
+        for pump_id, ml in ingredients.items():
+            pump = Pump.query.get(int(pump_id))
+            if pump and pump.is_alcohol:
+                points_reward += float(ml)
+        points_reward = round(points_reward)
+        
+        if recipe_id:
+            # Update existing
+            recipe = Recipe.query.get(recipe_id)
+            if not recipe:
+                return jsonify({'status': 'error', 'message': 'Recipe not found'}), 404
+            
+            recipe.name = name
+            recipe.description = description
+            recipe.category = category
+            recipe.ingredients_json = ingredients_json
+            recipe.points_reward = points_reward
+            message = 'Recipe updated'
+        else:
+            # Create new
+            recipe = Recipe(
+                name=name,
+                description=description,
+                category=category,
+                ingredients_json=ingredients_json,
+                points_reward=points_reward
+            )
+            db.session.add(recipe)
+            message = 'Recipe created'
+            
+        db.session.commit()
+        return jsonify({'status': 'success', 'message': message})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/api/admin/taste-amount', methods=['GET', 'POST'])
 def admin_api_taste_amount():
     """Admin API endpoint to get/set taste amount"""
@@ -1244,8 +1333,7 @@ def admin_api_taste_amount():
 def admin_dashboard():
     # Simple password check for admin access
     if not check_admin_auth():
-        flash('Unauthorized. Admin access only. Contact event organizer.', 'error')
-        return redirect(url_for('menu'))
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
     
     # Ensure we have all 8 pumps
     existing_pumps = Pump.query.count()
@@ -1260,7 +1348,11 @@ def admin_dashboard():
     # Filter out Admin2001 explicitly, just in case
     users = User.query.filter(User.nickname != 'Admin2001').order_by(User.points.desc()).all()
     
-    return render_template('admin_dashboard.html', pumps=pumps, recipes=recipes, users=users)
+    return jsonify({
+        'pumps': [p.to_dict() for p in pumps], 
+        'recipes': [r.to_dict() for r in recipes],
+        'users': [u.to_dict() for u in users]
+    })
 
 
 @app.route('/profile', methods=['GET', 'POST'])
@@ -1280,17 +1372,16 @@ def profile():
                 
                 # Logout and clear session
                 logout_user()
-                response = make_response(redirect(url_for('index')))
+                response = make_response(jsonify({'status': 'success', 'redirect': url_for('index')}))
                 response.delete_cookie('user_id')
                 
-                flash('Your account has been successfully deleted.', 'info')
                 return response
                 
             except Exception as e:
                 db.session.rollback()
-                flash(f'Error deleting account: {str(e)}', 'error')
+                return jsonify({'status': 'error', 'message': str(e)}), 500
     
-    return render_template('profile.html')
+    return jsonify({'user': current_user.to_dict()})
 
 # Logout functionality removed - users have permanent 12-hour sessions
 # If admin needs to logout, they can clear cookies manually
@@ -1300,12 +1391,34 @@ def profile():
 def internal_error(error):
     """Handle internal server errors gracefully"""
     db.session.rollback()
-    return render_template('error.html', error="Something went wrong. Please try again."), 500
+    return jsonify({'status': 'error', 'message': 'Internal Server Error'}), 500
 
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors"""
-    return render_template('error.html', error="Page not found."), 404
+    return jsonify({'status': 'error', 'message': 'Endpoint not found'}), 404
 
 if __name__ == '__main__':
+    with app.app_context():
+        # Ensure all tables exist
+        db.create_all()
+        print("✅ Database tables verified.")
+        
+        # Check for Admin2001
+        try:
+            admin = User.query.filter_by(nickname='Admin2001').first()
+            if not admin:
+                # Create default admin with a VALID 6-char recovery key
+                # Note: 'Cocktail2026' is too long for the 6-char constraint if checked strictly,
+                # but we use 'ADMIN1' to satisfy the 6-char constraint for the model.
+                # The admin bypass uses the cookie 'COCKTAIL2026', but this is for the DB record.
+                admin = User(nickname='Admin2001', recovery_key='ADMIN1')
+                db.session.add(admin)
+                db.session.commit()
+                print("👤 Default Admin2001 user created.")
+            else:
+                print("👤 Admin2001 user exists.")
+        except Exception as e:
+            print(f"⚠️ Validation check failed (expected on first run if tables didn't exist): {e}")
+
     app.run(debug=True, host='0.0.0.0')
