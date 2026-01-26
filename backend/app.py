@@ -41,8 +41,13 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URI', 'sqlite:/
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # CORS Configuration - Allow frontend on different domain
-# In production, replace '*' with your Cloudflare Pages domain
-CORS(app, origins=os.environ.get('CORS_ORIGINS', '*').split(','), 
+# Explicitly list allowed origins for security
+CORS_ORIGINS = [
+    'https://mixmasterai.app',
+    'https://mixmasterai.pages.dev',
+    'http://localhost:3000'
+]
+CORS(app, origins=CORS_ORIGINS, 
      supports_credentials=True,
      allow_headers=['Content-Type', 'Authorization'])
 
@@ -858,6 +863,15 @@ def internal_error(error):
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({'status': 'error', 'message': 'Resource not found'}), 404
+
+# =============================================================================
+# HEALTH CHECK ROUTE
+# =============================================================================
+
+@app.route('/', methods=['GET'])
+def health_check():
+    """Health check endpoint - verifies the API is online"""
+    return jsonify({'status': 'online', 'machine': 'MixMasterAI'})
 
 # =============================================================================
 # MAIN

@@ -5,6 +5,9 @@
  * Manages JWT token storage and automatic header injection.
  */
 
+// Production API URL - Backend running on Raspberry Pi via Cloudflare Tunnel
+window.API_BASE_URL = 'https://api.mixmasterai.app';
+
 class CocktailAPI {
     constructor(baseUrl = '') {
         // Default to same origin, but can be configured for remote API
