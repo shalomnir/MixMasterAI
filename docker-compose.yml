@@ -11,6 +11,7 @@ services:
       - /dev/gpiomem:/dev/gpiomem
     volumes:
       - ./instance:/app/instance
+      - /sys:/sys
     networks:
       - app-network
     restart: unless-stopped

@@ -205,8 +205,17 @@
     <div id="pour-overlay"
         class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex flex-col items-center justify-center text-center p-8">
         <div class="animate-spin rounded-full h-24 w-24 border-t-4 border-b-4 border-pink-500 mb-8"></div>
-        <h2 class="text-3xl font-bold text-white mb-2">Pouring...</h2>
+        <h2 class="text-3xl font-bold text-white mb-2" id="pouring-title">Pouring...</h2>
         <p class="text-slate-400">Please wait while we mix your drink.</p>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast-notification"
+        class="fixed top-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-4 rounded-xl shadow-2xl z-50 hidden animate-bounce">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl">🏁</span>
+            <span id="toast-message" class="font-semibold"></span>
+        </div>
     </div>
 
     <!-- API Client -->
@@ -515,8 +524,13 @@
 
             closeDrinkModal();
 
-            // Show pouring overlay
+            // Show pouring overlay with spinner
             const overlay = document.getElementById('pour-overlay');
+            overlay.innerHTML = `
+                <div class="animate-spin rounded-full h-24 w-24 border-t-4 border-b-4 border-pink-500 mb-8"></div>
+                <h2 class="text-3xl font-bold text-white mb-2" id="pouring-title">Pouring...</h2>
+                <p class="text-slate-400">Please wait while we mix your drink.</p>
+            `;
             overlay.classList.remove('hidden');
 
             try {
@@ -525,22 +539,20 @@
                     isTaste: isTaste
                 });
 
-                // Show success
-                overlay.innerHTML = `
-                    <div class="text-center">
-                        <div class="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shadow-lg mb-8">
-                            <svg class="w-20 h-20 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
-                            </svg>
-                        </div>
-                        <h2 class="text-4xl font-bold text-white mb-4">Enjoy! 🎉</h2>
-                        <p class="text-slate-300 text-lg mb-8">+${response.points_earned} points earned</p>
-                        <button onclick="document.getElementById('pour-overlay').classList.add('hidden')"
-                            class="px-8 py-4 bg-gradient-to-r from-pink-600 to-violet-600 rounded-xl font-bold text-lg">
-                            Close
-                        </button>
-                    </div>
-                `;
+                if (response.status === 'success') {
+                    // Highball Notification
+                    if (response.is_highball) {
+                        setTimeout(() => {
+                            showHighballToast();
+                        }, 1500);
+                    }
+
+                    // Show success screen
+                    showSuccessMessage(response.points_earned);
+                } else {
+                    throw new Error(response.message || 'Unknown error');
+                }
+
             } catch (error) {
                 overlay.innerHTML = `
                     <div class="text-center">
@@ -558,6 +570,127 @@
                     </div>
                 `;
             }
+        }
+
+        function showSuccessMessage(pointsEarned) {
+            const overlay = document.getElementById('pour-overlay');
+
+            // Fetch user's rank information
+            api.getUserStatistics(api.getCurrentUser().id || 0) // We might need to handle getting ID better if not stored, but api should handle auth
+                .then(statsResponse => {
+                    // Note: getUserStatistics returns { status, user, statistics: { rank, ... } }
+                    // But templates/menu.html used /api/user/rank which implies a different endpoint or logic?
+                    // Let's stick to the visual reproduction. The rank API call in legacy was specific.
+                    // If /api/user/rank doesn't exist in new backend, we use statistics.
+                    // The backend has /api/user/<id>/statistics which returns rank.
+
+                    let rankInfo = '';
+                    const rank = statsResponse.statistics ? statsResponse.statistics.rank : 0;
+
+                    if (rank === 1) {
+                        rankInfo = `
+                            <div class="mb-6 p-4 bg-gradient-to-r from-yellow-900/40 to-amber-900/40 rounded-xl border border-yellow-500/30">
+                                <p class="text-yellow-300 text-sm mb-1">👑 Leaderboard Position</p>
+                                <p class="text-white text-xl font-bold">You're in 1st place!</p>
+                                <p class="text-yellow-400 text-sm mt-1">You're leading the pack! 🎉</p>
+                            </div>
+                        `;
+                    } else if (rank > 0) {
+                        const suffix = rank === 1 ? 'st' : rank === 2 ? 'nd' : rank === 3 ? 'rd' : 'th';
+                        rankInfo = `
+                            <div class="mb-6 p-4 bg-gradient-to-r from-violet-900/40 to-pink-900/40 rounded-xl border border-white/10">
+                                <p class="text-slate-300 text-sm mb-1">🏆 Leaderboard Position</p>
+                                <p class="text-white text-xl font-bold">You are now ${rank}${suffix} place!</p>
+                            </div>
+                        `;
+                    }
+
+                    renderSuccessOverlay(overlay, pointsEarned, rankInfo);
+                })
+                .catch(err => {
+                    // Fallback without rank
+                    renderSuccessOverlay(overlay, pointsEarned, '');
+                });
+        }
+
+        function renderSuccessOverlay(overlay, points, rankInfo) {
+            overlay.innerHTML = `
+                <div class="relative text-center max-w-md mx-auto">
+                    <!-- Close Button -->
+                    <button onclick="hideSuccessScreen()" 
+                        class="absolute -top-4 -right-4 w-12 h-12 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center transition touch-manipulation z-10 border-2 border-white/10">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+
+                    <!-- Success Icon -->
+                    <div class="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shadow-lg mb-8">
+                        <svg class="w-20 h-20 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                    
+                    <div class="mb-8 animate-fade-in-up">
+                        <h2 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-violet-400 mb-3">Success!</h2>
+                        <p class="text-2xl text-white font-light">Enjoy your drink ✨</p>
+                    </div>
+
+                    <!-- Points Earned -->
+                    <div class="mb-6 transform transition-all hover:scale-105 duration-300">
+                        <div class="inline-flex items-center gap-3 bg-white/10 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/10 shadow-xl">
+                            <span class="text-3xl">🪙</span>
+                            <div class="text-left">
+                                <p class="text-xs text-slate-400 uppercase tracking-widest font-semibold">Earned</p>
+                                <p class="text-xl font-bold text-white">+${points} Points</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Rank Information -->
+                    ${rankInfo}
+                    
+                    <!-- Go to Rank Button -->
+                    <button onclick="window.location.href='leaderboard.html'" 
+                        class="w-full max-w-xs group relative overflow-hidden px-8 py-4 bg-gradient-to-r from-pink-600 to-violet-600 rounded-2xl font-bold text-lg text-white shadow-2xl shadow-purple-500/30 transition-all transform hover:scale-[1.02] active:scale-95">
+                        <span class="relative z-10 flex items-center justify-center gap-2">
+                            Go to Rank
+                            <svg class="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
+                        </span>
+                        <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                    </button>
+                </div>
+            `;
+        }
+
+        function hideSuccessScreen() {
+            document.getElementById('pour-overlay').classList.add('hidden');
+        }
+
+        function showHighballToast() {
+            const toast = document.getElementById('toast-notification');
+            const toastMessage = document.getElementById('toast-message');
+
+            toastMessage.innerText = `Base poured! Please top up with Soda/Tonic. 🥤`;
+            toast.classList.remove('hidden', 'bg-red-500');
+            toast.classList.add('bg-blue-600');
+
+            setTimeout(() => {
+                toast.classList.add('hidden');
+                toast.classList.remove('bg-blue-600');
+                toast.classList.add('bg-red-500');
+            }, 8000);
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast-notification');
+            const toastMessage = document.getElementById('toast-message');
+
+            toastMessage.innerText = message;
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 3000);
         }
 
         // Initialize

@@ -42,12 +42,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # CORS Configuration - Allow frontend on different domain
 # Explicitly list allowed origins for security
-CORS_ORIGINS = [
-    'https://mixmasterai.app',
-    'https://mixmasterai.pages.dev',
-    'http://localhost:3000'
-]
-CORS(app, origins=CORS_ORIGINS, 
+CORS(app, resources={r"/api/*": {"origins": ["https://mixmasterai.app", "https://mixmasterai.pages.dev", "http://localhost:3000"]}},
      supports_credentials=True,
      allow_headers=['Content-Type', 'Authorization'])
 
@@ -212,7 +207,7 @@ def token_required(f):
             return jsonify({'status': 'error', 'message': 'Token is invalid or expired'}), 401
         
         # Get user from database
-        user = User.query.get(payload['user_id'])
+        user = db.session.get(User, payload['user_id'])
         if not user:
             return jsonify({'status': 'error', 'message': 'User not found'}), 401
         
@@ -416,7 +411,7 @@ def api_get_recipes():
 @app.route('/api/recipes/<int:recipe_id>', methods=['GET'])
 def api_get_recipe(recipe_id):
     """Get a single recipe by ID"""
-    recipe = Recipe.query.get(recipe_id)
+    recipe = db.session.get(Recipe, recipe_id)
     if not recipe:
         return jsonify({'status': 'error', 'message': 'Recipe not found'}), 404
     
@@ -474,7 +469,7 @@ def api_pour_cocktail(current_user, recipe_id):
         is_strong = data.get('is_strong', False)
         is_taste = data.get('is_taste', False)
         
-        recipe = Recipe.query.get(recipe_id)
+        recipe = db.session.get(Recipe, recipe_id)
         if not recipe:
             return jsonify({'status': 'error', 'message': 'Recipe not found'}), 404
         
@@ -504,7 +499,7 @@ def api_pour_cocktail(current_user, recipe_id):
         # Apply strong mode (1.5x alcohol)
         if is_strong:
             for pump_id in calculated_ingredients.keys():
-                pump = Pump.query.get(int(pump_id))
+                pump = db.session.get(Pump, int(pump_id))
                 if pump and pump.is_alcohol:
                     calculated_ingredients[pump_id] *= 1.5
         
@@ -514,7 +509,7 @@ def api_pour_cocktail(current_user, recipe_id):
         
         for pump_id_str, ml_amount in calculated_ingredients.items():
             pump_id = int(pump_id_str)
-            pump = Pump.query.get(pump_id)
+            pump = db.session.get(Pump, pump_id)
             
             if not pump:
                 continue
@@ -524,6 +519,8 @@ def api_pour_cocktail(current_user, recipe_id):
             
             duration = (ml_amount / 50.0) * pump.seconds_per_50ml
             durations.append(duration)
+            
+            print(f"Attempting to toggle GPIO pin {pin_number} for {duration:.2f} seconds")
             
             thread = threading.Thread(
                 target=gpio_service.pour,
@@ -541,7 +538,7 @@ def api_pour_cocktail(current_user, recipe_id):
         # Calculate points (1 point per 1ml alcohol)
         total_alcohol_ml = 0
         for pump_id_str, ml_amount in calculated_ingredients.items():
-            pump = Pump.query.get(int(pump_id_str))
+            pump = db.session.get(Pump, int(pump_id_str))
             if pump and pump.is_alcohol:
                 total_alcohol_ml += ml_amount
         
@@ -625,7 +622,7 @@ def api_leaderboard():
 @app.route('/api/user/<int:user_id>/statistics', methods=['GET'])
 def api_user_statistics(user_id):
     """Get user statistics"""
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({'status': 'error', 'message': 'User not found'}), 404
     
@@ -635,7 +632,7 @@ def api_user_statistics(user_id):
     recipe_counts = {}
     
     for pour in user_history:
-        recipe = Recipe.query.get(pour.recipe_id)
+        recipe = db.session.get(Recipe, pour.recipe_id)
         if recipe:
             recipe_counts[recipe.name] = recipe_counts.get(recipe.name, 0) + 1
         total_alcohol_ml += pour.points_awarded or 0
@@ -694,7 +691,7 @@ def api_admin_get_pumps():
 @admin_required
 def api_admin_update_pump(pump_id):
     """Update pump configuration"""
-    pump = Pump.query.get(pump_id)
+    pump = db.session.get(Pump, pump_id)
     if not pump:
         return jsonify({'status': 'error', 'message': 'Pump not found'}), 404
     
@@ -750,7 +747,7 @@ def api_admin_create_recipe():
 @admin_required
 def api_admin_update_recipe(recipe_id):
     """Update an existing recipe"""
-    recipe = Recipe.query.get(recipe_id)
+    recipe = db.session.get(Recipe, recipe_id)
     if not recipe:
         return jsonify({'status': 'error', 'message': 'Recipe not found'}), 404
     
@@ -772,7 +769,7 @@ def api_admin_update_recipe(recipe_id):
 @admin_required
 def api_admin_delete_recipe(recipe_id):
     """Delete a recipe"""
-    recipe = Recipe.query.get(recipe_id)
+    recipe = db.session.get(Recipe, recipe_id)
     if not recipe:
         return jsonify({'status': 'error', 'message': 'Recipe not found'}), 404
     
@@ -794,7 +791,7 @@ def api_admin_get_users():
 @admin_required
 def api_admin_delete_user(user_id):
     """Delete a user"""
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     if not user:
         return jsonify({'status': 'error', 'message': 'User not found'}), 404
     
@@ -871,7 +868,7 @@ def not_found(error):
 @app.route('/', methods=['GET'])
 def health_check():
     """Health check endpoint - verifies the API is online"""
-    return jsonify({'status': 'online', 'machine': 'MixMasterAI'})
+    return jsonify({'status': 'online', 'service': 'MixMasterAI API'})
 
 # =============================================================================
 # MAIN
