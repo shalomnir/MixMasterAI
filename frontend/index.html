@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>AI Cocktail Mixer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/styles.css">
+
+    <!-- API Configuration -->
+    <script>
+        // Configure API base URL for your Raspberry Pi backend
+        // In production, this should be your Cloudflare Tunnel URL
+        window.API_BASE_URL = ''; // Empty = same origin, or set to: 'https://your-tunnel.trycloudflare.com'
+    </script>
+</head>
+
+<body class="bg-slate-900 text-white min-h-[100dvh] flex flex-col overflow-hidden">
+
+    <div class="h-[100dvh] overflow-hidden flex items-center justify-center p-4"
+        style="padding-bottom: calc(1rem + env(safe-area-inset-bottom));">
+        <div class="glass rounded-3xl p-10 md:p-14 max-w-lg w-full border border-white/10 shadow-2xl">
+            <div class="text-center space-y-8">
+                <div class="space-y-3">
+                    <h1
+                        class="text-5xl md:text-6xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-violet-500">
+                        Pour It Up.
+                    </h1>
+                    <p class="text-slate-400 text-base md:text-lg">The AI-powered cocktail experience.</p>
+                </div>
+
+                <!-- Error Message Display -->
+                <div id="error-message"
+                    class="hidden bg-red-900/30 border border-red-500/50 text-red-300 px-4 py-3 rounded-xl text-sm">
+                </div>
+
+                <!-- Registration/Login Form -->
+                <form id="registration-form" class="space-y-5">
+                    <div>
+                        <label for="nickname" class="block text-base text-slate-400 mb-3">Who are you?</label>
+                        <input type="text" name="nickname" id="nickname" required autofocus
+                            placeholder="Enter your nickname"
+                            class="w-full px-5 py-4 text-lg rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition">
+                    </div>
+
+                    <!-- Admin Password Field (hidden by default) -->
+                    <div id="admin-password-container" class="hidden">
+                        <label for="admin-password" class="block text-base text-slate-400 mb-3">Admin Password</label>
+                        <input type="password" name="admin-password" id="admin-password"
+                            placeholder="Enter admin password"
+                            class="w-full px-5 py-4 text-lg rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition">
+                    </div>
+
+                    <button type="submit" id="submit-btn"
+                        class="w-full py-5 text-xl bg-gradient-to-r from-pink-600 to-violet-600 rounded-xl font-bold shadow-lg hover:scale-[1.02] transition transform active:scale-95">
+                        Start Mixing
+                    </button>
+                </form>
+
+                <!-- Recovery Link -->
+                <div class="pt-4 border-t border-slate-700">
+                    <p class="text-slate-500 text-sm md:text-base mb-3">Lost your session?</p>
+                    <a href="recovery.html"
+                        class="text-pink-400 hover:text-pink-300 text-base font-semibold transition-colors">
+                        → Recover Account with Key
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Client -->
+    <script src="js/api.js"></script>
+
+    <script>
+        // Check if already logged in
+        if (api.isAuthenticated()) {
+            window.location.href = 'menu.html';
+        }
+
+        // Show admin password field when Admin2001 is entered
+        const nicknameInput = document.getElementById('nickname');
+        const adminPasswordContainer = document.getElementById('admin-password-container');
+
+        nicknameInput.addEventListener('input', function () {
+            if (this.value === 'Admin2001') {
+                adminPasswordContainer.classList.remove('hidden');
+            } else {
+                adminPasswordContainer.classList.add('hidden');
+            }
+        });
+
+        // Form submission
+        document.getElementById('registration-form').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const submitBtn = document.getElementById('submit-btn');
+            const errorDiv = document.getElementById('error-message');
+            const nickname = nicknameInput.value.trim();
+            const adminPassword = document.getElementById('admin-password').value;
+
+            // Disable button during submission
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Loading...';
+            errorDiv.classList.add('hidden');
+
+            try {
+                let response;
+
+                if (nickname === 'Admin2001') {
+                    // Admin login
+                    response = await api.login(nickname, adminPassword);
+                    if (response.status === 'success') {
+                        window.location.href = 'admin/dashboard.html';
+                        return;
+                    }
+                } else {
+                    // Try to register new user first
+                    try {
+                        response = await api.register(nickname);
+                    } catch (err) {
+                        // If registration fails (user exists), try login
+                        if (err.message.includes('already taken')) {
+                            // Show error - user should use recovery
+                            throw err;
+                        }
+                        throw err;
+                    }
+                }
+
+                if (response.status === 'success') {
+                    // Show recovery key to new users
+                    if (response.user && response.user.recovery_key) {
+                        alert(`Welcome! Your recovery key is: ${response.user.recovery_key}\n\nSave this key - you'll need it to recover your account!`);
+                    }
+                    window.location.href = 'menu.html';
+                }
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('hidden');
+                nicknameInput.focus();
+                nicknameInput.select();
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Start Mixing';
+            }
+        });
+    </script>
+
+</body>
+
+</html>

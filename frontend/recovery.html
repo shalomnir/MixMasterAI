@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AI Cocktail Mixer - Recovery</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/styles.css">
+    <script>window.API_BASE_URL = '';</script>
+</head>
+
+<body class="bg-slate-900 text-white min-h-[100dvh] flex flex-col overflow-hidden">
+
+    <div class="h-[100dvh] overflow-hidden flex items-center justify-center p-4">
+        <div class="glass rounded-3xl p-10 md:p-14 max-w-lg w-full border border-white/10 shadow-2xl">
+            <div class="text-center space-y-8">
+                <div class="space-y-3">
+                    <h1
+                        class="text-4xl md:text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-violet-500">
+                        Account Recovery
+                    </h1>
+                    <p class="text-slate-400 text-base">Enter your 6-character recovery key</p>
+                </div>
+
+                <div id="error-message"
+                    class="hidden bg-red-900/30 border border-red-500/50 text-red-300 px-4 py-3 rounded-xl text-sm">
+                </div>
+
+                <form id="recovery-form" class="space-y-5">
+                    <div>
+                        <input type="text" id="recovery-key" required autofocus placeholder="ABC123" maxlength="6"
+                            class="w-full px-5 py-4 text-2xl text-center tracking-[0.5em] font-mono rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-pink-500 uppercase">
+                    </div>
+                    <button type="submit" id="submit-btn"
+                        class="w-full py-5 text-xl bg-gradient-to-r from-pink-600 to-violet-600 rounded-xl font-bold shadow-lg hover:scale-[1.02] transition transform active:scale-95">
+                        Recover Account
+                    </button>
+                </form>
+
+                <div class="pt-4 border-t border-slate-700">
+                    <a href="index.html" class="text-slate-400 hover:text-white text-base transition-colors">
+                        ← Back to Login
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script>
+        if (api.isAuthenticated()) {
+            window.location.href = 'menu.html';
+        }
+
+        document.getElementById('recovery-form').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const submitBtn = document.getElementById('submit-btn');
+            const errorDiv = document.getElementById('error-message');
+            const recoveryKey = document.getElementById('recovery-key').value.trim().toUpperCase();
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Recovering...';
+            errorDiv.classList.add('hidden');
+
+            try {
+                const response = await api.recover(recoveryKey);
+                if (response.status === 'success') {
+                    window.location.href = 'menu.html';
+                }
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Recover Account';
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,9 @@
+# Backend Dependencies
+Flask>=2.3.0
+Flask-SQLAlchemy>=3.0.0
+Flask-CORS>=4.0.0
+PyJWT>=2.8.0
+python-dotenv>=1.0.0
+
+# Raspberry Pi GPIO (only needed on Pi)
+# RPi.GPIO>=0.7.1

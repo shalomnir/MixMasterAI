@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  cocktail-mixer:
-    build: .
-    container_name: cocktail-mixer
+  backend:
+    build: ./backend
+    container_name: cocktail-mixer-backend
     ports:
       - "5000:5000"
     privileged: true
@@ -11,4 +11,22 @@ services:
       - /dev/gpiomem:/dev/gpiomem
     volumes:
       - ./instance:/app/instance
+    networks:
+      - app-network
     restart: unless-stopped
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cocktail-mixer-tunnel
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+networks:
+  app-network:
+    driver: bridge

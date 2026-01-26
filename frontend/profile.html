@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AI Cocktail Mixer - Profile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/styles.css">
+    <script>window.API_BASE_URL = '';</script>
+</head>
+
+<body class="bg-slate-900 text-white min-h-[100dvh] flex flex-col">
+
+    <header class="px-4 pt-1 text-center pb-0">
+        <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-violet-500">
+            MixMaster AI
+        </h1>
+    </header>
+
+    <main class="flex-grow container mx-auto px-4 pt-4 pb-24">
+        <div class="max-w-md mx-auto space-y-6">
+
+            <!-- Profile Header -->
+            <div class="glass rounded-2xl p-6 text-center">
+                <div
+                    class="w-24 h-24 mx-auto rounded-full bg-gradient-to-br from-pink-500 to-violet-500 flex items-center justify-center text-4xl mb-4">
+                    👤
+                </div>
+                <h2 id="user-nickname" class="text-2xl font-bold text-white mb-2">Loading...</h2>
+                <div class="inline-flex items-center gap-2 bg-violet-600/30 px-4 py-2 rounded-full">
+                    <span>🏆</span>
+                    <span id="user-points" class="font-bold">0</span>
+                    <span class="text-slate-300">points</span>
+                </div>
+            </div>
+
+            <!-- Statistics -->
+            <div class="glass rounded-2xl p-6">
+                <h3 class="text-lg font-bold text-white mb-4">📊 Your Stats</h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400">Current Rank</span>
+                        <span id="stat-rank" class="font-bold text-pink-400">#-</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400">Total Alcohol</span>
+                        <span id="stat-alcohol" class="font-bold">0 ml</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400">Total Pours</span>
+                        <span id="stat-pours" class="font-bold">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400">Favorite Drink</span>
+                        <span id="stat-favorite" class="font-bold text-violet-400">-</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400">Strong Mode %</span>
+                        <span id="stat-strong" class="font-bold">0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recovery Key -->
+            <div class="glass rounded-2xl p-6">
+                <h3 class="text-lg font-bold text-white mb-2">🔑 Recovery Key</h3>
+                <p class="text-slate-400 text-sm mb-4">Save this key to recover your account on another device.</p>
+                <div class="bg-slate-800 rounded-xl p-4 text-center">
+                    <p id="recovery-key" class="text-2xl font-mono font-bold tracking-[0.3em] text-pink-400">------</p>
+                </div>
+            </div>
+
+            <!-- Logout Button -->
+            <button onclick="logout()"
+                class="w-full py-4 bg-slate-800 hover:bg-slate-700 rounded-xl font-semibold transition">
+                Logout
+            </button>
+        </div>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="fixed bottom-0 left-0 right-0 glass border-t border-white/10 z-[100] bottom-nav-safe">
+        <div class="flex justify-around items-center py-1 px-6">
+            <a href="profile.html"
+                class="flex flex-col items-center space-y-1 text-white min-w-[50px] min-h-[50px] justify-center relative">
+                <div class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-xl">👤</div>
+                <span class="text-xs font-medium">Profile</span>
+                <div
+                    class="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-gradient-to-r from-pink-500 to-violet-500 rounded-full">
+                </div>
+            </a>
+            <a href="menu.html" class="flex flex-col items-center space-y-1 -mt-8">
+                <div
+                    class="w-16 h-16 rounded-full bg-gradient-to-r from-pink-600 to-violet-600 flex items-center justify-center text-3xl shadow-lg">
+                    🍹</div>
+                <span class="text-xs font-bold text-pink-400">Drinks</span>
+            </a>
+            <a href="leaderboard.html"
+                class="flex flex-col items-center space-y-1 text-slate-300 hover:text-white min-w-[50px] min-h-[50px] justify-center">
+                <div class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-xl">🏆</div>
+                <span class="text-xs font-medium">Ranks</span>
+            </a>
+        </div>
+    </nav>
+
+    <script src="js/api.js"></script>
+    <script>
+        if (!api.isAuthenticated()) {
+            window.location.href = 'index.html';
+        }
+
+        async function loadProfile() {
+            try {
+                // Get current user
+                const userRes = await api.getCurrentUser();
+                const user = userRes.user;
+
+                document.getElementById('user-nickname').textContent = user.nickname;
+                document.getElementById('user-points').textContent = user.points;
+
+                // Get statistics
+                const statsRes = await api.getUserStatistics(user.id);
+                const stats = statsRes.statistics;
+
+                document.getElementById('stat-rank').textContent = stats.rank ? `#${stats.rank}` : '-';
+                document.getElementById('stat-alcohol').textContent = `${stats.total_alcohol_ml} ml`;
+                document.getElementById('stat-pours').textContent = stats.total_pours;
+                document.getElementById('stat-favorite').textContent = stats.favorite_cocktail || '-';
+                document.getElementById('stat-strong').textContent = `${stats.strong_mode_percentage}%`;
+
+                // Recovery key (if available in local storage)
+                const storedUser = api.getUser();
+                if (storedUser && storedUser.recovery_key) {
+                    document.getElementById('recovery-key').textContent = storedUser.recovery_key;
+                }
+
+            } catch (error) {
+                console.error('Failed to load profile:', error);
+            }
+        }
+
+        function logout() {
+            api.logout();
+        }
+
+        loadProfile();
+    </script>
+</body>
+
+</html>

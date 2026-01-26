@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>AI Cocktail Mixer - Menu</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/styles.css">
+
+    <script>
+        window.API_BASE_URL = '';
+    </script>
+</head>
+
+<body class="bg-slate-900 text-white min-h-[100dvh] flex flex-col">
+
+    <!-- Top Header -->
+    <header class="px-4 pt-1 text-center pb-0">
+        <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-violet-500">
+            MixMaster AI
+        </h1>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow container mx-auto px-4 pt-0 pb-24">
+        <div class="space-y-8">
+            <div class="flex justify-between items-end mb-2">
+                <div>
+                    <h2 class="text-2xl font-bold text-white mb-0">Menu</h2>
+                    <p class="text-slate-400 text-sm">Select a drink to pour.</p>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loading-state" class="text-center py-20">
+                <div class="spinner mx-auto mb-4"></div>
+                <p class="text-slate-400">Loading drinks...</p>
+            </div>
+
+            <!-- Classic Cocktails Section -->
+            <div id="classic-section" class="category-section hidden">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="h-1 w-12 bg-gradient-to-r from-pink-500 to-violet-500 rounded-full"></div>
+                    <h3
+                        class="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-violet-400">
+                        Classic Cocktails
+                    </h3>
+                    <div class="h-1 flex-grow bg-gradient-to-r from-violet-500/50 to-transparent rounded-full"></div>
+                </div>
+                <div id="classic-grid" class="grid grid-cols-2 gap-4"></div>
+            </div>
+
+            <!-- Highballs Section -->
+            <div id="highball-section" class="category-section hidden">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="h-1 w-12 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full"></div>
+                    <div class="flex flex-col">
+                        <h3
+                            class="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">
+                            Highballs
+                        </h3>
+                        <p class="text-[10px] text-slate-400 italic">Add Soda/Tonic after pouring</p>
+                    </div>
+                    <div class="h-1 flex-grow bg-gradient-to-r from-blue-500/50 to-transparent rounded-full"></div>
+                </div>
+                <div id="highball-grid" class="grid grid-cols-2 gap-4"></div>
+            </div>
+
+            <!-- Shots Section -->
+            <div id="shot-section" class="category-section hidden">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="h-1 w-12 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"></div>
+                    <h3
+                        class="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400">
+                        Shots
+                    </h3>
+                    <div class="h-1 flex-grow bg-gradient-to-r from-orange-500/50 to-transparent rounded-full"></div>
+                </div>
+                <div id="shot-grid" class="grid grid-cols-2 gap-4"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav id="bottom-nav" class="fixed bottom-0 left-0 right-0 glass border-t border-white/10 z-[100] bottom-nav-safe">
+        <div class="flex justify-around items-center py-1 px-6">
+            <!-- Profile -->
+            <a href="profile.html"
+                class="flex flex-col items-center space-y-1 text-slate-300 hover:text-white active:scale-95 transition-all group touch-manipulation min-w-[50px] min-h-[50px] justify-center relative">
+                <div
+                    class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-xl group-hover:bg-slate-700 transition">
+                    👤
+                </div>
+                <span class="text-xs font-medium">Profile</span>
+            </a>
+
+            <!-- Pour (Center - Highlighted) -->
+            <a href="menu.html" class="flex flex-col items-center space-y-1 -mt-8 touch-manipulation relative"
+                data-active="true">
+                <div
+                    class="w-16 h-16 rounded-full bg-gradient-to-r from-pink-600 to-violet-600 flex items-center justify-center text-3xl shadow-lg shadow-pink-500/30 hover:scale-105 active:scale-95 transition-all transform">
+                    🍹
+                </div>
+                <span class="text-xs font-bold text-white">Drinks</span>
+            </a>
+
+            <!-- Leaderboard -->
+            <a href="leaderboard.html"
+                class="flex flex-col items-center space-y-1 text-slate-300 hover:text-white active:scale-95 transition-all group touch-manipulation min-w-[50px] min-h-[50px] justify-center relative">
+                <div
+                    class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-xl group-hover:bg-slate-700 transition">
+                    🏆
+                </div>
+                <span class="text-xs font-medium">Ranks</span>
+            </a>
+        </div>
+    </nav>
+
+    <!-- Drink Details Modal -->
+    <div id="drink-modal" class="fixed inset-0 z-[200] hidden">
+        <div onclick="closeDrinkModal()" class="absolute inset-0 bg-black/80 backdrop-blur-md"></div>
+        <div id="modal-content"
+            class="absolute bottom-0 left-0 right-0 md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:max-w-lg md:bottom-auto md:rounded-3xl glass rounded-t-3xl md:rounded-b-3xl p-8 transform transition-transform duration-300 translate-y-full flex flex-col max-h-[90vh]"
+            style="padding-bottom: calc(2rem + env(safe-area-inset-bottom));">
+
+            <button onclick="closeDrinkModal()"
+                class="absolute top-4 right-4 w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center transition touch-manipulation z-10">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+
+            <div class="flex-shrink-0">
+                <div class="flex justify-center mb-4">
+                    <div
+                        class="w-20 h-20 rounded-full bg-gradient-to-br from-pink-500 to-violet-500 flex items-center justify-center text-4xl shadow-lg">
+                        🍹
+                    </div>
+                </div>
+                <h2 id="modal-drink-name" class="text-3xl font-bold text-center text-white mb-3"></h2>
+                <div id="modal-description-container" class="mb-3" style="display: none;">
+                    <p id="modal-description" class="text-slate-300 text-center text-sm italic"></p>
+                </div>
+                <div class="flex justify-center mb-4">
+                    <div id="modal-points-badge" class="bg-violet-600 px-4 py-1 rounded-full text-sm font-bold"></div>
+                </div>
+            </div>
+
+            <div class="overflow-y-auto flex-grow" style="max-height: 50vh;">
+                <!-- Strong Drink Toggle -->
+                <div class="mb-3 p-3 bg-slate-800/50 rounded-xl border-2 border-transparent"
+                    id="strong-toggle-container">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-white font-bold text-sm">Strong Drink 💪</p>
+                            <p class="text-slate-400 text-xs">50% more alcohol</p>
+                        </div>
+                        <button onclick="toggleStrong()" id="strong-toggle"
+                            class="w-16 h-8 rounded-full bg-slate-700 relative transition-all duration-300">
+                            <div id="toggle-indicator"
+                                class="absolute top-1 left-1 w-6 h-6 rounded-full bg-white transition-all duration-300">
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Taste Toggle -->
+                <div class="mb-4 p-3 bg-slate-800/50 rounded-xl border-2 border-transparent"
+                    id="taste-toggle-container">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-white font-bold text-sm">Not Sure? Get a Taste 🥄</p>
+                            <p class="text-slate-400 text-xs">Small portion</p>
+                        </div>
+                        <button onclick="toggleTaste()" id="taste-toggle"
+                            class="w-16 h-8 rounded-full bg-slate-700 relative transition-all duration-300">
+                            <div id="taste-toggle-indicator"
+                                class="absolute top-1 left-1 w-6 h-6 rounded-full bg-white transition-all duration-300">
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Ingredients List -->
+                <div class="mb-4 bg-slate-800/50 rounded-xl p-4">
+                    <p class="text-slate-300 text-sm font-semibold mb-3">What's in it:</p>
+                    <div id="modal-ingredients-list" class="grid grid-cols-2 gap-x-4 gap-y-2 text-white text-sm"></div>
+                </div>
+            </div>
+
+            <div class="flex-shrink-0 mt-4">
+                <button onclick="confirmPour()" id="pour-button"
+                    class="w-full py-4 bg-gradient-to-r from-pink-600 to-violet-600 rounded-xl font-bold text-lg shadow-lg hover:scale-[1.02] active:scale-95 transition-all transform touch-manipulation">
+                    Pour This Drink
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pouring Overlay -->
+    <div id="pour-overlay"
+        class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex flex-col items-center justify-center text-center p-8">
+        <div class="animate-spin rounded-full h-24 w-24 border-t-4 border-b-4 border-pink-500 mb-8"></div>
+        <h2 class="text-3xl font-bold text-white mb-2">Pouring...</h2>
+        <p class="text-slate-400">Please wait while we mix your drink.</p>
+    </div>
+
+    <!-- API Client -->
+    <script src="js/api.js"></script>
+
+    <script>
+        // State
+        let currentRecipe = null;
+        let isStrong = false;
+        let isTaste = false;
+        let pumpData = {};
+        let machineState = {};
+
+        // Check authentication
+        if (!api.isAuthenticated()) {
+            window.location.href = 'index.html';
+        }
+
+        // Load data on page load
+        async function loadData() {
+            try {
+                // Load pumps and recipes in parallel
+                const [pumpsResponse, recipesResponse] = await Promise.all([
+                    api.getPumps(),
+                    api.getRecipes()
+                ]);
+
+                pumpData = pumpsResponse.pumps;
+                machineState = pumpsResponse.machine_state;
+
+                // Hide loading, show content
+                document.getElementById('loading-state').classList.add('hidden');
+
+                // Render recipes
+                renderRecipes(recipesResponse.recipes);
+            } catch (error) {
+                console.error('Failed to load data:', error);
+                document.getElementById('loading-state').innerHTML = `
+                    <p class="text-red-400">Failed to load menu. Please refresh.</p>
+                `;
+            }
+        }
+
+        function renderRecipes(recipes) {
+            // Classic
+            if (recipes.classic && recipes.classic.length > 0) {
+                document.getElementById('classic-section').classList.remove('hidden');
+                document.getElementById('classic-grid').innerHTML = recipes.classic.map(r => createRecipeCard(r, 'pink')).join('');
+            }
+
+            // Highball
+            if (recipes.highball && recipes.highball.length > 0) {
+                document.getElementById('highball-section').classList.remove('hidden');
+                document.getElementById('highball-grid').innerHTML = recipes.highball.map(r => createRecipeCard(r, 'cyan')).join('');
+            }
+
+            // Shot
+            if (recipes.shot && recipes.shot.length > 0) {
+                document.getElementById('shot-section').classList.remove('hidden');
+                document.getElementById('shot-grid').innerHTML = recipes.shot.map(r => createRecipeCard(r, 'amber')).join('');
+            }
+        }
+
+        function createRecipeCard(recipe, color) {
+            const gradientColors = {
+                'pink': 'from-pink-500 to-violet-500',
+                'cyan': 'from-cyan-500 to-blue-500',
+                'amber': 'from-amber-500 to-orange-500'
+            };
+
+            return `
+                <div onclick='openDrinkModal(${JSON.stringify(recipe).replace(/'/g, "\\'")})'
+                    class="cocktail-card glass rounded-2xl aspect-square relative overflow-hidden cursor-pointer hover:scale-[1.02] active:scale-95 transition-all transform border border-white/5 flex flex-col items-center justify-center p-4 gap-2">
+                    <div class="flex-shrink-0 w-14 h-14 rounded-full bg-gradient-to-br ${gradientColors[color]} flex items-center justify-center text-2xl shadow-lg">
+                        🍹
+                    </div>
+                    <div class="w-full flex flex-col items-center">
+                        <h3 class="text-lg font-extrabold text-white text-center line-clamp-1 leading-tight mb-1">${recipe.name}</h3>
+                        <p class="text-xs text-slate-400 text-center line-clamp-2 leading-snug px-1 font-medium">
+                            ${recipe.description || ''}
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function openDrinkModal(recipe) {
+            currentRecipe = recipe;
+            isStrong = false;
+            isTaste = false;
+
+            document.getElementById('modal-drink-name').textContent = recipe.name;
+
+            // Description
+            const descContainer = document.getElementById('modal-description-container');
+            if (recipe.description) {
+                document.getElementById('modal-description').textContent = recipe.description;
+                descContainer.style.display = 'block';
+            } else {
+                descContainer.style.display = 'none';
+            }
+
+            // Calculate and show points
+            updatePointsDisplay();
+
+            // Show ingredients
+            updateIngredientsDisplay();
+
+            // Reset toggles
+            resetToggles();
+
+            // Show modal
+            const modal = document.getElementById('drink-modal');
+            const modalContent = document.getElementById('modal-content');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modalContent.classList.remove('translate-y-full');
+                modalContent.classList.add('translate-y-0');
+            }, 10);
+        }
+
+        function closeDrinkModal() {
+            const modalContent = document.getElementById('modal-content');
+            modalContent.classList.add('translate-y-full');
+            modalContent.classList.remove('translate-y-0');
+            setTimeout(() => {
+                document.getElementById('drink-modal').classList.add('hidden');
+            }, 300);
+        }
+
+        function calculatePoints() {
+            if (!currentRecipe || !currentRecipe.ingredients) return 0;
+
+            let totalAlcoholMl = 0;
+            const targetVol = isTaste ? machineState.taste_amount_ml : getTargetVolume();
+            const originalTotal = Object.values(currentRecipe.ingredients).reduce((sum, ml) => sum + parseFloat(ml), 0);
+
+            if (originalTotal === 0) return 0;
+
+            for (const [pumpId, ml] of Object.entries(currentRecipe.ingredients)) {
+                const pump = pumpData[pumpId];
+                if (pump && pump.is_alcohol) {
+                    let scaledMl = (parseFloat(ml) / originalTotal) * targetVol;
+                    if (isStrong && !isTaste) scaledMl *= 1.5;
+                    totalAlcoholMl += scaledMl;
+                }
+            }
+
+            return Math.round(totalAlcoholMl);
+        }
+
+        function getTargetVolume() {
+            if (!currentRecipe) return 110;
+            switch (currentRecipe.category) {
+                case 'highball': return machineState.highball_target_vol;
+                case 'shot': return machineState.shot_target_vol;
+                default: return machineState.classic_target_vol;
+            }
+        }
+
+        function updatePointsDisplay() {
+            const points = calculatePoints();
+            const badge = document.getElementById('modal-points-badge');
+            if (isStrong) {
+                badge.textContent = `${points} PTS (STRONG!)`;
+            } else if (isTaste) {
+                badge.textContent = `${points} PTS (Taste)`;
+            } else {
+                badge.textContent = `${points} PTS`;
+            }
+        }
+
+        function updateIngredientsDisplay() {
+            if (!currentRecipe || !currentRecipe.ingredients) return;
+
+            const list = document.getElementById('modal-ingredients-list');
+            list.innerHTML = '';
+
+            const targetVol = isTaste ? machineState.taste_amount_ml : getTargetVolume();
+            const originalTotal = Object.values(currentRecipe.ingredients).reduce((sum, ml) => sum + parseFloat(ml), 0);
+
+            for (const [pumpId, ml] of Object.entries(currentRecipe.ingredients)) {
+                const pump = pumpData[pumpId];
+                const ingredientName = pump ? pump.ingredient_name : `Pump ${pumpId}`;
+
+                let scaledMl = (parseFloat(ml) / originalTotal) * targetVol;
+                if (isStrong && !isTaste && pump && pump.is_alcohol) {
+                    scaledMl *= 1.5;
+                }
+
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'text-left font-medium';
+                nameDiv.textContent = ingredientName;
+
+                const amountDiv = document.createElement('div');
+                amountDiv.className = 'text-right text-slate-400';
+                amountDiv.textContent = `${Math.round(scaledMl)}ml`;
+
+                list.appendChild(nameDiv);
+                list.appendChild(amountDiv);
+            }
+        }
+
+        function resetToggles() {
+            isStrong = false;
+            isTaste = false;
+
+            document.getElementById('strong-toggle').classList.remove('bg-amber-500');
+            document.getElementById('strong-toggle').classList.add('bg-slate-700');
+            document.getElementById('toggle-indicator').style.transform = 'translateX(0)';
+            document.getElementById('strong-toggle-container').classList.remove('border-amber-500');
+
+            document.getElementById('taste-toggle').classList.remove('bg-cyan-500');
+            document.getElementById('taste-toggle').classList.add('bg-slate-700');
+            document.getElementById('taste-toggle-indicator').style.transform = 'translateX(0)';
+            document.getElementById('taste-toggle-container').classList.remove('border-cyan-500');
+
+            updatePourButton();
+        }
+
+        function toggleStrong() {
+            isStrong = !isStrong;
+            if (isStrong) isTaste = false;
+
+            // Update UI
+            const toggle = document.getElementById('strong-toggle');
+            const indicator = document.getElementById('toggle-indicator');
+            const container = document.getElementById('strong-toggle-container');
+
+            if (isStrong) {
+                toggle.classList.remove('bg-slate-700');
+                toggle.classList.add('bg-amber-500');
+                indicator.style.transform = 'translateX(2rem)';
+                container.classList.add('border-amber-500');
+            } else {
+                toggle.classList.add('bg-slate-700');
+                toggle.classList.remove('bg-amber-500');
+                indicator.style.transform = 'translateX(0)';
+                container.classList.remove('border-amber-500');
+            }
+
+            // Reset taste toggle if needed
+            if (isStrong) {
+                document.getElementById('taste-toggle').classList.remove('bg-cyan-500');
+                document.getElementById('taste-toggle').classList.add('bg-slate-700');
+                document.getElementById('taste-toggle-indicator').style.transform = 'translateX(0)';
+                document.getElementById('taste-toggle-container').classList.remove('border-cyan-500');
+            }
+
+            updatePointsDisplay();
+            updateIngredientsDisplay();
+            updatePourButton();
+        }
+
+        function toggleTaste() {
+            isTaste = !isTaste;
+            if (isTaste) isStrong = false;
+
+            const toggle = document.getElementById('taste-toggle');
+            const indicator = document.getElementById('taste-toggle-indicator');
+            const container = document.getElementById('taste-toggle-container');
+
+            if (isTaste) {
+                toggle.classList.remove('bg-slate-700');
+                toggle.classList.add('bg-cyan-500');
+                indicator.style.transform = 'translateX(2rem)';
+                container.classList.add('border-cyan-500');
+            } else {
+                toggle.classList.add('bg-slate-700');
+                toggle.classList.remove('bg-cyan-500');
+                indicator.style.transform = 'translateX(0)';
+                container.classList.remove('border-cyan-500');
+            }
+
+            // Reset strong toggle if needed
+            if (isTaste) {
+                document.getElementById('strong-toggle').classList.remove('bg-amber-500');
+                document.getElementById('strong-toggle').classList.add('bg-slate-700');
+                document.getElementById('toggle-indicator').style.transform = 'translateX(0)';
+                document.getElementById('strong-toggle-container').classList.remove('border-amber-500');
+            }
+
+            updatePointsDisplay();
+            updateIngredientsDisplay();
+            updatePourButton();
+        }
+
+        function updatePourButton() {
+            const btn = document.getElementById('pour-button');
+            btn.className = 'w-full py-4 rounded-xl font-bold text-lg shadow-lg hover:scale-[1.02] active:scale-95 transition-all transform touch-manipulation text-white';
+
+            if (isStrong) {
+                btn.textContent = 'Strong Pour! 💪';
+                btn.classList.add('bg-gradient-to-r', 'from-red-600', 'to-orange-600');
+            } else if (isTaste) {
+                btn.textContent = 'Tasting Pour 🥄';
+                btn.classList.add('bg-gradient-to-r', 'from-cyan-500', 'to-blue-600');
+            } else {
+                btn.textContent = 'Pour This Drink';
+                btn.classList.add('bg-gradient-to-r', 'from-pink-600', 'to-violet-600');
+            }
+        }
+
+        async function confirmPour() {
+            if (!currentRecipe) return;
+
+            closeDrinkModal();
+
+            // Show pouring overlay
+            const overlay = document.getElementById('pour-overlay');
+            overlay.classList.remove('hidden');
+
+            try {
+                const response = await api.pourCocktail(currentRecipe.id, {
+                    isStrong: isStrong,
+                    isTaste: isTaste
+                });
+
+                // Show success
+                overlay.innerHTML = `
+                    <div class="text-center">
+                        <div class="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shadow-lg mb-8">
+                            <svg class="w-20 h-20 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                        </div>
+                        <h2 class="text-4xl font-bold text-white mb-4">Enjoy! 🎉</h2>
+                        <p class="text-slate-300 text-lg mb-8">+${response.points_earned} points earned</p>
+                        <button onclick="document.getElementById('pour-overlay').classList.add('hidden')"
+                            class="px-8 py-4 bg-gradient-to-r from-pink-600 to-violet-600 rounded-xl font-bold text-lg">
+                            Close
+                        </button>
+                    </div>
+                `;
+            } catch (error) {
+                overlay.innerHTML = `
+                    <div class="text-center">
+                        <div class="w-32 h-32 mx-auto rounded-full bg-red-500 flex items-center justify-center shadow-lg mb-8">
+                            <svg class="w-20 h-20 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </div>
+                        <h2 class="text-3xl font-bold text-white mb-4">Error</h2>
+                        <p class="text-red-300 mb-8">${error.message}</p>
+                        <button onclick="document.getElementById('pour-overlay').classList.add('hidden')"
+                            class="px-8 py-4 bg-gradient-to-r from-pink-600 to-violet-600 rounded-xl font-bold text-lg">
+                            Close
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize
+        loadData();
+    </script>
+
+</body>
+
+</html>
