@@ -6,12 +6,12 @@
  */
 
 // Production API URL - Backend running on Raspberry Pi via Cloudflare Tunnel
-window.API_BASE_URL = 'https://api.mixmasterai.app';
+const API_BASE_URL = 'https://api.mixmasterai.app';
 
 class CocktailAPI {
-    constructor(baseUrl = '') {
-        // Default to same origin, but can be configured for remote API
-        this.baseUrl = baseUrl || window.API_BASE_URL || '';
+    constructor() {
+        // Always use the production API URL
+        this.baseUrl = API_BASE_URL;
         this.tokenKey = 'cocktail_auth_token';
         this.userKey = 'cocktail_user';
     }
