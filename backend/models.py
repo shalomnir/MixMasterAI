@@ -106,6 +106,8 @@ class MachineState(db.Model):
     highball_target_vol = db.Column(db.Integer, default=90, nullable=False)  # Long drinks with soda/tonic
     shot_target_vol = db.Column(db.Integer, default=40, nullable=False)  # Shots and chasers
     taste_amount_ml = db.Column(db.Integer, default=30, nullable=False)  # Global taste portion size
+    # Current event name for display on guest UI
+    current_event_name = db.Column(db.String(200), default="Welcome Party", nullable=False)
     
     @staticmethod
     def get_instance():

@@ -12,11 +12,19 @@
 
 <body class="bg-slate-900 text-white min-h-[100dvh] flex flex-col">
 
+    <!-- Top Brand Header (always shows) -->
     <header class="px-4 pt-1 text-center pb-0">
         <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-violet-500">
-            MixMaster AI
+            MixMasterAI
         </h1>
     </header>
+
+    <!-- Dynamic Event Title -->
+    <div class="px-4 pt-1 text-center">
+        <h2 id="event-title" class="text-lg font-semibold text-white">
+            Rating
+        </h2>
+    </div>
 
     <main class="flex-grow container mx-auto px-4 pt-4 pb-24">
         <div class="space-y-6">
@@ -161,32 +169,52 @@
 
         async function loadLeaderboard() {
             try {
-                const [leaderboardRes, statsRes] = await Promise.all([
+                const [leaderboardRes, statsRes, settingsRes] = await Promise.all([
                     api.getLeaderboard(),
-                    api.getGlobalStatistics()
+                    api.getGlobalStatistics(),
+                    api.getSettings()
                 ]);
 
-                // Global stats
-                document.getElementById('total-alcohol').textContent = `${statsRes.statistics.total_alcohol_liters}L`;
-                document.getElementById('total-cocktails').textContent = statsRes.statistics.total_cocktails_poured;
+                // Display event name in header with "Rating - " prefix
+                if (settingsRes.current_event_name) {
+                    document.getElementById('event-title').textContent = `Rating - ${settingsRes.current_event_name}`;
+                    document.title = `Rating - ${settingsRes.current_event_name}`;
+                }
 
-                // Leaderboard
+                // Global stats (API returns flat structure, not nested in 'statistics')
+                document.getElementById('total-alcohol').textContent = `${statsRes.total_alcohol_liters || 0}L`;
+                document.getElementById('total-cocktails').textContent = statsRes.total_cocktails_poured || 0;
+
+                // Leaderboard (API returns 'users' not 'leaderboard')
+                const users = leaderboardRes.users || [];
                 const list = document.getElementById('leaderboard-list');
-                if (leaderboardRes.leaderboard.length === 0) {
+                if (users.length === 0) {
                     list.innerHTML = '<p class="text-center text-slate-400">No data yet. Start pouring!</p>';
                     return;
                 }
 
-                list.innerHTML = leaderboardRes.leaderboard.map((user, index) => {
+                // Get current user to highlight their row
+                const currentUser = api.getUser();
+                const currentUserId = currentUser ? currentUser.id : null;
+
+                list.innerHTML = users.map((user, index) => {
                     const rank = index + 1;
                     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
-                    const bgClass = rank <= 3 ? 'bg-gradient-to-r from-amber-900/30 to-yellow-900/30 border-yellow-500/30' : 'bg-slate-800/50 border-slate-700';
+                    const isCurrentUser = user.id === currentUserId;
+                    const bgClass = isCurrentUser
+                        ? 'bg-gradient-to-r from-pink-900/40 to-violet-900/40 border-pink-500/50 ring-2 ring-pink-500/30'
+                        : rank <= 3
+                            ? 'bg-gradient-to-r from-amber-900/30 to-yellow-900/30 border-yellow-500/30'
+                            : 'bg-slate-800/50 border-slate-700';
 
                     return `
                         <div onclick="showUserStats(${user.id})" class="glass rounded-xl p-4 flex items-center gap-4 border ${bgClass} cursor-pointer hover:bg-white/5 transition-colors">
                             <div class="text-2xl font-bold w-10 text-center">${medal}</div>
                             <div class="flex-grow">
-                                <p class="text-white font-semibold">${user.nickname}</p>
+                                <div class="flex items-center gap-2">
+                                    <p class="text-white font-semibold">${user.nickname}</p>
+                                    ${isCurrentUser ? '<span class="text-xs bg-pink-500/30 text-pink-300 px-2 py-0.5 rounded-full font-medium">You</span>' : ''}
+                                </div>
                             </div>
                             <div class="text-right">
                                 <p class="text-xl font-bold text-pink-400">${user.points}</p>
@@ -218,25 +246,25 @@
             try {
                 const response = await api.getUserStatistics(userId);
 
-                // Update modal with user data (API returns { status, user, statistics })
-                document.getElementById('modal-user-nickname').textContent = response.user.nickname;
-                document.getElementById('modal-user-points').textContent = response.user.points;
+                // Update modal with user data (API returns flat structure)
+                document.getElementById('modal-user-nickname').textContent = response.nickname || '--';
+                document.getElementById('modal-user-points').textContent = response.points || 0;
 
                 // Total Alcohol
-                const alcoholValue = response.statistics.total_alcohol_ml > 0 ? Math.round(response.statistics.total_alcohol_ml) : 0;
+                const alcoholValue = response.total_alcohol_ml > 0 ? Math.round(response.total_alcohol_ml) : 0;
                 document.getElementById('modal-stat-alcohol').textContent = alcoholValue;
 
                 // Favorite Cocktail
-                const favorite = response.statistics.favorite_cocktail || 'None Yet';
+                const favorite = response.favorite_cocktail || 'None Yet';
                 document.getElementById('modal-stat-favorite').textContent = favorite;
 
-                // Current Rank (API returns 'rank' inside statistics)
+                // Current Rank (API returns 'current_rank')
                 document.getElementById('modal-stat-rank').textContent =
-                    response.statistics.rank > 0 ? `#${response.statistics.rank}` : '--';
+                    response.current_rank > 0 ? `#${response.current_rank}` : '--';
 
                 // Strong Mode %
                 document.getElementById('modal-stat-strong').textContent =
-                    response.statistics.total_pours > 0 ? `${response.statistics.strong_mode_percentage}%` : '0%';
+                    response.total_pours > 0 ? `${response.strong_mode_percentage}%` : '0%';
 
             } catch (error) {
                 console.error('Failed to fetch user statistics:', error);

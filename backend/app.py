@@ -23,9 +23,9 @@ try:
     GPIO_AVAILABLE = True
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
-    print("✅ RPi.GPIO module loaded. Hardware control enabled.")
+    print("[OK] RPi.GPIO module loaded. Hardware control enabled.")
 except ImportError:
-    print("⚠️ RPi.GPIO not found. Running in SIMULATION mode.")
+    print("[WARN] RPi.GPIO not found. Running in SIMULATION mode.")
 
 
 def initialize_pump_pin(pin_number):
@@ -33,7 +33,7 @@ def initialize_pump_pin(pin_number):
     if GPIO_AVAILABLE and pin_number:
         GPIO.setup(pin_number, GPIO.OUT)
         GPIO.output(pin_number, GPIO.LOW)
-        print(f"📌 Pin {pin_number} initialized as OUTPUT (set LOW - pump OFF)")
+        print(f"[PIN] Pin {pin_number} initialized as OUTPUT (set LOW - pump OFF)")
 
 
 def pour_ingredient(pin_number, duration, pump_id=None):
@@ -41,29 +41,29 @@ def pour_ingredient(pin_number, duration, pump_id=None):
     pump_label = f"Pump {pump_id}" if pump_id else f"Pin {pin_number}"
 
     if not GPIO_AVAILABLE:
-        print(f"🧪 [SIMULATION] START: {pump_label} (Pin {pin_number}) running for {duration:.2f}s")
+        print(f"[SIM] [SIMULATION] START: {pump_label} (Pin {pin_number}) running for {duration:.2f}s")
         time.sleep(duration)
-        print(f"🧪 [SIMULATION] STOP: {pump_label} finished")
+        print(f"[SIM] [SIMULATION] STOP: {pump_label} finished")
         return True
 
     if not pin_number:
-        print(f"❌ {pump_label} has no pin assigned - SKIPPED")
+        print(f"[ERR] {pump_label} has no pin assigned - SKIPPED")
         return False
 
     try:
         GPIO.setup(pin_number, GPIO.OUT, initial=GPIO.LOW)
         GPIO.output(pin_number, GPIO.HIGH)
-        print(f"⚡ [HARDWARE] {pump_label} (Pin {pin_number}) ON - Pouring...")
+        print(f"[HW] [HARDWARE] {pump_label} (Pin {pin_number}) ON - Pouring...")
         time.sleep(duration)
         GPIO.output(pin_number, GPIO.LOW)
-        print(f"⚡ [HARDWARE] {pump_label} (Pin {pin_number}) OFF - Complete")
+        print(f"[HW] [HARDWARE] {pump_label} (Pin {pin_number}) OFF - Complete")
         return True
     except Exception as e:
         try:
             GPIO.output(pin_number, GPIO.LOW)
         except:
             pass
-        print(f"❌ [ERROR] {pump_label} (Pin {pin_number}): {str(e)}")
+        print(f"[ERR] [ERROR] {pump_label} (Pin {pin_number}): {str(e)}")
         return False
 
 
@@ -77,12 +77,37 @@ JWT_SECRET = app.config['SECRET_KEY']
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRY_HOURS = 72
 
-CORS(app, supports_credentials=True, resources={r"/api/*": {
-    "origins": ["http://localhost:5000", "http://127.0.0.1:5500", "http://127.0.0.1:5000",
-                "https://mixmasterai.app", "https://api.mixmasterai.app"],
+CORS(app, resources={r"/*": {
+    "origins": "*",  # Allow all origins
+    "allow_headers": ["Content-Type", "Authorization"],
+    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 }})
 
 db.init_app(app)
+
+# --- Database Initialization ---
+_db_initialized = False
+
+@app.before_request
+def ensure_db_initialized():
+    """Initialize database tables on first request if needed."""
+    global _db_initialized
+    if _db_initialized:
+        return
+    _db_initialized = True
+    with app.app_context():
+        db.create_all()
+        # Ensure MachineState singleton exists
+        if MachineState.query.count() == 0:
+            db.session.add(MachineState(id=1, is_pouring=False))
+            db.session.commit()
+            print("[INIT] MachineState created via before_request.")
+        # Ensure 8 pumps exist
+        if Pump.query.count() == 0:
+            for i in range(1, 9):
+                db.session.add(Pump(id=i, ingredient_name='Empty', is_active=False, seconds_per_50ml=3.0))
+            db.session.commit()
+            print("[INIT] Default pumps created via before_request.")
 
 # --- JWT Utilities ---
 
@@ -328,6 +353,7 @@ def get_settings():
         'shot_target_vol': machine_state.shot_target_vol,
         'taste_amount_ml': machine_state.taste_amount_ml,
         'is_pouring': machine_state.is_pouring,
+        'current_event_name': machine_state.current_event_name,
     })
 
 
@@ -433,9 +459,15 @@ def pour_cocktail(recipe_id):
         # Points
         total_alcohol_ml = sum(
             ml for pid, ml in calculated.items()
-            if Pump.query.get(int(pid)) and Pump.query.get(int(pid)).is_alcohol
+            if db.session.get(Pump, int(pid)) and db.session.get(Pump, int(pid)).is_alcohol
         )
         points_earned = round(total_alcohol_ml)
+        
+        # Strong mode gives 2x points as gamification incentive
+        # (Note: actual alcohol output only increases by 1.5x)
+        if is_strong:
+            points_earned = round(points_earned * 2)
+        
         user.points += points_earned
 
         history = PourHistory(
@@ -911,6 +943,40 @@ def admin_taste_amount():
         return jsonify({'status': 'error', 'message': 'Invalid value'}), 400
 
 
+@app.route('/api/admin/start-event', methods=['POST'])
+@admin_required
+def start_new_event():
+    """Start a new event: update event name and delete all guests."""
+    data = request.get_json() or {}
+    event_name = data.get('event_name', '').strip()
+    
+    if not event_name:
+        return jsonify({'status': 'error', 'message': 'Event name is required'}), 400
+    if len(event_name) > 200:
+        return jsonify({'status': 'error', 'message': 'Event name must be 200 characters or less'}), 400
+    
+    try:
+        # Update event name
+        machine_state = MachineState.get_instance()
+        machine_state.current_event_name = event_name
+        
+        # Delete all pour history first (foreign key constraint)
+        PourHistory.query.delete()
+        # Delete all guests
+        User.query.delete()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'New event "{event_name}" started! Guest list has been reset.',
+            'event_name': event_name
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': f'Failed to start event: {str(e)}'}), 500
+
+
 # ==========================================================================
 # ERROR HANDLERS
 # ==========================================================================
@@ -933,7 +999,7 @@ def internal_error(error):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        print("✅ Database tables verified.")
+        print("[OK] Database tables verified.")
 
         # Ensure 8 pumps exist
         if Pump.query.count() == 0:
@@ -941,15 +1007,15 @@ if __name__ == '__main__':
                 db.session.add(Pump(id=i, ingredient_name='Empty', is_active=False, seconds_per_50ml=3.0))
             db.session.add(MachineState(id=1, is_pouring=False))
             db.session.commit()
-            print("🔧 Default pumps and machine state created.")
+            print("[INIT] Default pumps and machine state created.")
 
         # Ensure Admin2001 exists
         try:
             if not User.query.filter_by(nickname='Admin2001').first():
                 db.session.add(User(nickname='Admin2001', recovery_key='ADMIN1'))
                 db.session.commit()
-                print("👤 Admin2001 user created.")
+                print("[USER] Admin2001 user created.")
         except Exception as e:
-            print(f"⚠️ Admin check: {e}")
+            print(f"[WARN] Admin check: {e}")
 
     app.run(debug=True, host='0.0.0.0')

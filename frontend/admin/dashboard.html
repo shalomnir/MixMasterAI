@@ -70,20 +70,7 @@
     <script src="../js/config.js"></script>
     <script src="../js/api.js"></script>
     <script>
-        // TRANSIENT AUTH CHECK
-        // Check sessionStorage for the transient admin token
-        const sessionToken = sessionStorage.getItem('cocktail_auth_token');
-        if (sessionToken) {
-            // Inject into API client so it sends it with requests
-            api.setToken(sessionToken);
-            // Also set user if needed for UI
-            const sessionUser = sessionStorage.getItem('cocktail_user');
-            if (sessionUser) {
-                api.setUser(JSON.parse(sessionUser));
-            }
-        }
-
-        // Auth Check (now that API has the token)
+        // Auth Check (api.js now handles sessionStorage automatically)
         if (!api.isAuthenticated()) {
             window.location.href = '../index.html';
         }
@@ -130,16 +117,6 @@
 
         <div id="dashboard-content" class="space-y-10 hidden">
 
-            <!-- Header Controls (Refresh) -->
-            <div class="flex justify-end -mt-16 mb-10 relative z-50 pointer-events-none">
-                <div class="pointer-events-auto">
-                    <button onclick="window.location.reload()"
-                        class="p-2 bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-700 hover:border-slate-500 shadow-lg transition-all"
-                        title="Refresh Dashboard">
-                        🔄
-                    </button>
-                </div>
-            </div>
 
             <!-- Pump Configuration Section -->
             <section>
@@ -237,6 +214,39 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </section>
+
+            <!-- Start New Event Section -->
+            <section>
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-xl font-bold text-slate-100 flex items-center gap-3">
+                        <span
+                            class="w-1.5 h-6 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]"></span>
+                        Start New Event
+                    </h3>
+                </div>
+
+                <div class="bg-slate-900 rounded-xl border border-slate-800 p-6 transition-all hover:border-slate-600">
+                    <p class="text-slate-400 text-sm mb-4">
+                        ⚠️ Starting a new event will <strong class="text-red-400">delete all registered guests</strong>
+                        and reset the leaderboard.
+                    </p>
+                    <div class="flex flex-col md:flex-row gap-4">
+                        <div class="flex-1">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Event Name</label>
+                            <input type="text" id="new-event-name" placeholder="e.g. Birthday Bash 2026" maxlength="200"
+                                class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/50 transition-all">
+                        </div>
+                        <div class="flex items-end">
+                            <button onclick="startNewEvent()"
+                                class="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl font-bold text-sm shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all">
+                                🎉 Start Event
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-slate-500 text-xs mt-3">Current Event: <span id="current-event-name-display"
+                            class="text-emerald-400 font-semibold">-</span></p>
                 </div>
             </section>
 
@@ -456,6 +466,46 @@
         </div>
     </div>
 
+    <!-- User Modal -->
+    <div id="user-modal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 modal-backdrop transition-opacity" onclick="closeUserModal()"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-md p-4">
+            <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+                <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                        <span class="text-2xl">👤</span>
+                        <span>Edit User</span>
+                    </h3>
+                    <button onclick="closeUserModal()"
+                        class="text-slate-500 hover:text-white transition-colors">✕</button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <input type="hidden" id="modal-user-id">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nickname</label>
+                        <input type="text" id="modal-user-nickname"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Points</label>
+                        <input type="number" id="modal-user-points"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white font-mono focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500">
+                    </div>
+                </div>
+                <div class="p-4 border-t border-slate-800 flex gap-3 bg-slate-900/50">
+                    <button type="button" onclick="deleteUser()"
+                        class="px-4 py-3 text-red-500 hover:bg-red-900/20 rounded-xl font-bold text-sm transition-colors border border-transparent hover:border-red-900/30">🗑️
+                        Delete</button>
+                    <div class="flex-1"></div>
+                    <button onclick="closeUserModal()"
+                        class="px-6 py-3 text-slate-400 hover:text-white font-semibold text-sm transition-colors">Cancel</button>
+                    <button onclick="saveUser()"
+                        class="px-8 py-3 bg-pink-600 hover:bg-pink-500 text-white rounded-xl font-bold text-sm shadow-[0_0_15px_rgba(236,72,153,0.4)] transition-all">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         let pumpsData = [];
         let recipesData = [];
@@ -528,7 +578,7 @@
             // Add existing recipes
             const recipeCards = recipes.map(recipe => `
                 <div class="bg-slate-900 rounded-xl border border-slate-800 p-5 shadow-sm hover:border-violet-500/50 hover:shadow-violet-500/10 cursor-pointer transition-all group relative"
-                    onclick='openRecipeModal(${JSON.stringify(recipe).replace(/'/g, "\\'")})'>
+                    onclick='openRecipeModal(${JSON.stringify(recipe).replace(/'/g, "&apos;")})'>
                     <div class="flex justify-between items-start mb-3">
                         <h4 class="text-lg font-bold text-slate-200 group-hover:text-white transition-colors">${recipe.name}</h4>
                     </div>
@@ -596,6 +646,65 @@
             document.getElementById('highball-volume-input').value = settings.highball_target_vol;
             document.getElementById('shot-volume-input').value = settings.shot_target_vol;
             document.getElementById('taste-amount-input').value = settings.taste_amount_ml;
+            // Display current event name
+            if (settings.current_event_name) {
+                document.getElementById('current-event-name-display').textContent = settings.current_event_name;
+            }
+        }
+
+        // --- User Modal Functions ---
+
+        function openUserModal(rowElement) {
+            const userId = rowElement.dataset.id;
+            const nickname = rowElement.dataset.nickname;
+            const points = rowElement.dataset.points;
+
+            document.getElementById('modal-user-id').value = userId;
+            document.getElementById('modal-user-nickname').value = nickname;
+            document.getElementById('modal-user-points').value = points;
+            document.getElementById('user-modal').classList.remove('hidden');
+        }
+
+        function closeUserModal() {
+            document.getElementById('user-modal').classList.add('hidden');
+        }
+
+        async function saveUser() {
+            const id = document.getElementById('modal-user-id').value;
+            const nickname = document.getElementById('modal-user-nickname').value.trim();
+            const points = parseInt(document.getElementById('modal-user-points').value) || 0;
+
+            if (!nickname) {
+                showToast('Please enter a nickname', 'error');
+                return;
+            }
+
+            try {
+                await api.adminSaveUser({ id: parseInt(id), nickname, points });
+                showToast('User updated');
+                closeUserModal();
+                const res = await api.adminGetUsers();
+                usersData = res.users;
+                renderUsers(usersData);
+            } catch (e) {
+                showToast(e.message, 'error');
+            }
+        }
+
+        async function deleteUser() {
+            const id = document.getElementById('modal-user-id').value;
+            if (!confirm("Delete this user? This cannot be undone.")) return;
+
+            try {
+                await api.adminDeleteUser(parseInt(id));
+                showToast('User deleted');
+                closeUserModal();
+                const res = await api.adminGetUsers();
+                usersData = res.users;
+                renderUsers(usersData);
+            } catch (e) {
+                showToast(e.message, 'error');
+            }
         }
 
         // --- Logic & Actions ---
@@ -630,6 +739,31 @@
             api.adminUpdateTasteAmount(parseInt(value)).then(() => {
                 showToast(`Taste amount saved`);
             }).catch(e => showToast(e.message, 'error'));
+        }
+
+        async function startNewEvent() {
+            const eventName = document.getElementById('new-event-name').value.trim();
+            if (!eventName) {
+                showToast('Please enter an event name', 'error');
+                return;
+            }
+
+            if (!confirm(`Start new event "${eventName}"?\n\nThis will DELETE ALL registered guests and reset the leaderboard!`)) {
+                return;
+            }
+
+            try {
+                const response = await api.post('/api/admin/start-event', { event_name: eventName });
+                showToast(response.message);
+                document.getElementById('current-event-name-display').textContent = eventName;
+                document.getElementById('new-event-name').value = '';
+                // Refresh users list
+                const usersRes = await api.adminGetUsers();
+                usersData = usersRes.users;
+                renderUsers(usersData);
+            } catch (e) {
+                showToast(e.message, 'error');
+            }
         }
 
         // --- Modals ---

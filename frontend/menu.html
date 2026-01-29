@@ -15,12 +15,20 @@
 
 <body class="bg-slate-900 text-white min-h-[100dvh] flex flex-col">
 
-    <!-- Top Header -->
+    <!-- Top Brand Header (always shows) -->
     <header class="px-4 pt-1 text-center pb-0">
         <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-violet-500">
-            MixMaster AI
+            MixMasterAI
         </h1>
     </header>
+
+    <!-- Dynamic Event Title -->
+    <div class="px-4 pt-1 text-center">
+        <h2 id="event-title" class="text-lg font-semibold text-white">
+            Menu
+        </h2>
+        <p class="text-slate-400 text-sm">Select a drink to pour.</p>
+    </div>
 
     <!-- Main Content -->
     <main class="flex-grow container mx-auto px-4 pt-0 pb-24">
@@ -235,24 +243,47 @@
         // Load data on page load
         async function loadData() {
             try {
-                // Load pumps and recipes in parallel
-                const [pumpsResponse, recipesResponse] = await Promise.all([
+                // Load pumps, recipes, and settings in parallel
+                const [pumpsResponse, recipesResponse, settingsResponse] = await Promise.all([
                     api.getPumps(),
-                    api.getRecipes()
+                    api.getRecipes(),
+                    api.getSettings()
                 ]);
 
                 pumpData = pumpsResponse.pumps;
-                machineState = pumpsResponse.machine_state;
+                // Machine state is flat in the response, not nested
+                machineState = {
+                    classic_target_vol: pumpsResponse.classic_target_vol,
+                    highball_target_vol: pumpsResponse.highball_target_vol,
+                    shot_target_vol: pumpsResponse.shot_target_vol,
+                    taste_amount_ml: pumpsResponse.taste_amount_ml
+                };
+
+                // Display event name in dynamic title
+                if (settingsResponse.current_event_name) {
+                    document.getElementById('event-title').textContent = `Menu - ${settingsResponse.current_event_name}`;
+                    document.title = `Menu - ${settingsResponse.current_event_name}`;
+                }
 
                 // Hide loading, show content
                 document.getElementById('loading-state').classList.add('hidden');
 
-                // Render recipes
-                renderRecipes(recipesResponse.recipes);
+                // Render recipes (API returns classic_cocktails, highballs, shots)
+                renderRecipes({
+                    classic: recipesResponse.classic_cocktails || [],
+                    highball: recipesResponse.highballs || [],
+                    shot: recipesResponse.shots || []
+                });
             } catch (error) {
                 console.error('Failed to load data:', error);
+                const errorMessage = error.isServerDown
+                    ? '⚠️ Server is offline. Please ensure the backend is running.'
+                    : 'Failed to load menu. Please refresh.';
                 document.getElementById('loading-state').innerHTML = `
-                    <p class="text-red-400">Failed to load menu. Please refresh.</p>
+                    <p class="text-red-400 text-lg mb-4">${errorMessage}</p>
+                    <button onclick="location.reload()" class="px-6 py-2 bg-pink-600 hover:bg-pink-700 rounded-lg transition">
+                        Retry
+                    </button>
                 `;
             }
         }
@@ -285,7 +316,7 @@
             };
 
             return `
-                <div onclick='openDrinkModal(${JSON.stringify(recipe).replace(/'/g, "\\'")})'
+                <div onclick='openDrinkModal(${JSON.stringify(recipe).replace(/'/g, "&apos;")})'
                     class="cocktail-card glass rounded-2xl aspect-square relative overflow-hidden cursor-pointer hover:scale-[1.02] active:scale-95 transition-all transform border border-white/5 flex flex-col items-center justify-center p-4 gap-2">
                     <div class="flex-shrink-0 w-14 h-14 rounded-full bg-gradient-to-br ${gradientColors[color]} flex items-center justify-center text-2xl shadow-lg">
                         🍹
@@ -357,12 +388,18 @@
                 const pump = pumpData[pumpId];
                 if (pump && pump.is_alcohol) {
                     let scaledMl = (parseFloat(ml) / originalTotal) * targetVol;
-                    if (isStrong && !isTaste) scaledMl *= 1.5;
+                    // Strong mode increases alcohol by 1.5x (handled by hardware)
+                    if (isStrong) scaledMl *= 1.5;
                     totalAlcoholMl += scaledMl;
                 }
             }
 
-            return Math.round(totalAlcoholMl);
+            // Strong mode gives 2x points as gamification incentive
+            let points = Math.round(totalAlcoholMl);
+            if (isStrong) {
+                points = Math.round(points * 2);
+            }
+            return points;
         }
 
         function getTargetVolume() {
@@ -377,8 +414,10 @@
         function updatePointsDisplay() {
             const points = calculatePoints();
             const badge = document.getElementById('modal-points-badge');
-            if (isStrong) {
-                badge.textContent = `${points} PTS (STRONG!)`;
+            if (isStrong && isTaste) {
+                badge.textContent = `${points} PTS (2x STRONG TASTE!)`;
+            } else if (isStrong) {
+                badge.textContent = `${points} PTS (2x STRONG!)`;
             } else if (isTaste) {
                 badge.textContent = `${points} PTS (Taste)`;
             } else {
@@ -397,10 +436,11 @@
 
             for (const [pumpId, ml] of Object.entries(currentRecipe.ingredients)) {
                 const pump = pumpData[pumpId];
-                const ingredientName = pump ? pump.ingredient_name : `Pump ${pumpId}`;
+                const ingredientName = pump ? pump.name : `Pump ${pumpId}`;
 
                 let scaledMl = (parseFloat(ml) / originalTotal) * targetVol;
-                if (isStrong && !isTaste && pump && pump.is_alcohol) {
+                // Strong mode increases alcohol by 1.5x (can combine with Taste)
+                if (isStrong && pump && pump.is_alcohol) {
                     scaledMl *= 1.5;
                 }
 
@@ -436,7 +476,7 @@
 
         function toggleStrong() {
             isStrong = !isStrong;
-            if (isStrong) isTaste = false;
+            // Note: Strong and Taste can now be active simultaneously
 
             // Update UI
             const toggle = document.getElementById('strong-toggle');
@@ -455,14 +495,6 @@
                 container.classList.remove('border-amber-500');
             }
 
-            // Reset taste toggle if needed
-            if (isStrong) {
-                document.getElementById('taste-toggle').classList.remove('bg-cyan-500');
-                document.getElementById('taste-toggle').classList.add('bg-slate-700');
-                document.getElementById('taste-toggle-indicator').style.transform = 'translateX(0)';
-                document.getElementById('taste-toggle-container').classList.remove('border-cyan-500');
-            }
-
             updatePointsDisplay();
             updateIngredientsDisplay();
             updatePourButton();
@@ -470,7 +502,7 @@
 
         function toggleTaste() {
             isTaste = !isTaste;
-            if (isTaste) isStrong = false;
+            // Note: Strong and Taste can now be active simultaneously
 
             const toggle = document.getElementById('taste-toggle');
             const indicator = document.getElementById('taste-toggle-indicator');
@@ -488,14 +520,6 @@
                 container.classList.remove('border-cyan-500');
             }
 
-            // Reset strong toggle if needed
-            if (isTaste) {
-                document.getElementById('strong-toggle').classList.remove('bg-amber-500');
-                document.getElementById('strong-toggle').classList.add('bg-slate-700');
-                document.getElementById('toggle-indicator').style.transform = 'translateX(0)';
-                document.getElementById('strong-toggle-container').classList.remove('border-amber-500');
-            }
-
             updatePointsDisplay();
             updateIngredientsDisplay();
             updatePourButton();
@@ -505,8 +529,11 @@
             const btn = document.getElementById('pour-button');
             btn.className = 'w-full py-4 rounded-xl font-bold text-lg shadow-lg hover:scale-[1.02] active:scale-95 transition-all transform touch-manipulation text-white';
 
-            if (isStrong) {
-                btn.textContent = 'Strong Pour! 💪';
+            if (isStrong && isTaste) {
+                btn.textContent = 'Strong Taste! 💪🥄';
+                btn.classList.add('bg-gradient-to-r', 'from-red-600', 'to-amber-500');
+            } else if (isStrong) {
+                btn.textContent = 'Strong Pour! 💪 (2x PTS)';
                 btn.classList.add('bg-gradient-to-r', 'from-red-600', 'to-orange-600');
             } else if (isTaste) {
                 btn.textContent = 'Tasting Pour 🥄';
@@ -522,20 +549,69 @@
 
             closeDrinkModal();
 
-            // Show pouring overlay with spinner
             const overlay = document.getElementById('pour-overlay');
+
+            // Calculate estimated pour duration (client-side estimate)
+            const targetVol = isTaste ? machineState.taste_amount_ml : getTargetVolume();
+            const originalTotal = Object.values(currentRecipe.ingredients).reduce((sum, ml) => sum + parseFloat(ml), 0);
+            let maxDuration = 0;
+
+            for (const [pumpId, ml] of Object.entries(currentRecipe.ingredients)) {
+                const pump = pumpData[pumpId];
+                if (pump && pump.seconds_per_50ml) {
+                    let scaledMl = (parseFloat(ml) / originalTotal) * targetVol;
+                    if (isStrong && pump.is_alcohol) scaledMl *= 1.5;
+                    const duration = (scaledMl / 50.0) * pump.seconds_per_50ml;
+                    maxDuration = Math.max(maxDuration, duration);
+                }
+            }
+
+            const estimatedSeconds = Math.ceil(maxDuration);
+
+            // Show pouring overlay with progress bar
             overlay.innerHTML = `
-                <div class="animate-spin rounded-full h-24 w-24 border-t-4 border-b-4 border-pink-500 mb-8"></div>
-                <h2 class="text-3xl font-bold text-white mb-2" id="pouring-title">Pouring...</h2>
-                <p class="text-slate-400">Please wait while we mix your drink.</p>
+                <div class="text-center max-w-sm mx-auto">
+                    <h2 class="text-3xl font-bold text-white mb-2">Pouring...</h2>
+                    <p class="text-slate-400 mb-6">Please wait while we mix your drink.</p>
+                    
+                    <!-- Progress Bar -->
+                    <div class="w-full bg-slate-700 rounded-full h-4 mb-4 overflow-hidden">
+                        <div id="pour-progress-bar" class="h-full bg-gradient-to-r from-pink-500 to-violet-500 rounded-full transition-all duration-100" style="width: 0%"></div>
+                    </div>
+                    
+                    <!-- Countdown Timer -->
+                    <p id="pour-countdown" class="text-2xl font-bold text-pink-400 mb-4">${estimatedSeconds}s remaining</p>
+                    
+                    <!-- Animated Drink Icon -->
+                    <div class="text-6xl animate-bounce">🍹</div>
+                </div>
             `;
             overlay.classList.remove('hidden');
+
+            // Animate progress bar
+            let elapsed = 0;
+            const progressBar = document.getElementById('pour-progress-bar');
+            const countdown = document.getElementById('pour-countdown');
+            const interval = setInterval(() => {
+                elapsed += 0.1;
+                const progress = Math.min((elapsed / estimatedSeconds) * 100, 100);
+                const remaining = Math.max(Math.ceil(estimatedSeconds - elapsed), 0);
+
+                if (progressBar) progressBar.style.width = `${progress}%`;
+                if (countdown) countdown.textContent = `${remaining}s remaining`;
+
+                if (elapsed >= estimatedSeconds) {
+                    clearInterval(interval);
+                }
+            }, 100);
 
             try {
                 const response = await api.pourCocktail(currentRecipe.id, {
                     isStrong: isStrong,
                     isTaste: isTaste
                 });
+
+                clearInterval(interval);
 
                 if (response.status === 'success') {
                     // Highball Notification
@@ -545,13 +621,14 @@
                         }, 1500);
                     }
 
-                    // Show success screen
-                    showSuccessMessage(response.points_earned);
+                    // Show success screen (API returns points_added)
+                    showSuccessMessage(response.points_added);
                 } else {
                     throw new Error(response.message || 'Unknown error');
                 }
 
             } catch (error) {
+                clearInterval(interval);
                 overlay.innerHTML = `
                     <div class="text-center">
                         <div class="w-32 h-32 mx-auto rounded-full bg-red-500 flex items-center justify-center shadow-lg mb-8">
@@ -573,17 +650,20 @@
         function showSuccessMessage(pointsEarned) {
             const overlay = document.getElementById('pour-overlay');
 
-            // Fetch user's rank information
-            api.getUserStatistics(api.getCurrentUser().id || 0) // We might need to handle getting ID better if not stored, but api should handle auth
-                .then(statsResponse => {
-                    // Note: getUserStatistics returns { status, user, statistics: { rank, ... } }
-                    // But templates/menu.html used /api/user/rank which implies a different endpoint or logic?
-                    // Let's stick to the visual reproduction. The rank API call in legacy was specific.
-                    // If /api/user/rank doesn't exist in new backend, we use statistics.
-                    // The backend has /api/user/<id>/statistics which returns rank.
+            // Get user from stored data
+            const user = api.getUser();
+            if (!user || !user.id) {
+                // No user ID available, show success without rank info
+                renderSuccessOverlay(overlay, pointsEarned, '');
+                return;
+            }
 
+            // Fetch user's rank information
+            api.getUserStatistics(user.id)
+                .then(statsResponse => {
                     let rankInfo = '';
-                    const rank = statsResponse.statistics ? statsResponse.statistics.rank : 0;
+                    // API returns flat structure with current_rank
+                    const rank = statsResponse.current_rank || 0;
 
                     if (rank === 1) {
                         rankInfo = `

@@ -23,7 +23,8 @@ class CocktailAPI {
     // =========================================================================
 
     getToken() {
-        return localStorage.getItem(this.tokenKey);
+        // Prioritize sessionStorage for transient admin sessions
+        return sessionStorage.getItem(this.tokenKey) || localStorage.getItem(this.tokenKey);
     }
 
     setToken(token) {
@@ -92,6 +93,14 @@ class CocktailAPI {
             return data;
         } catch (error) {
             console.error(`API Error (${endpoint}):`, error);
+
+            // Check if this is a network error (server down/unreachable)
+            if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+                const serverDownError = new Error('Server is currently unreachable. Please check if the backend is running.');
+                serverDownError.isServerDown = true;
+                throw serverDownError;
+            }
+
             throw error;
         }
     }
@@ -162,7 +171,10 @@ class CocktailAPI {
 
     logout() {
         this.removeToken();
-        window.location.href = '/';
+        // Also clear sessionStorage for admin sessions
+        sessionStorage.removeItem(this.tokenKey);
+        sessionStorage.removeItem(this.userKey);
+        window.location.href = '/index.html';
     }
 
     // =========================================================================

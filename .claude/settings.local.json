@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(pip show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nRefactor: Decouple backend as pure JSON API with JWT auth\n\n- Replace Flask-Login sessions with JWT token auth \\(PyJWT\\)\n- Remove all render_template/redirect/url_for calls from app.py\n- Fix duplicate route registrations \\(admin/update, admin/recipe/save, settings\\)\n- Fix menu route typo \\(for c in shots -> for s in shots\\)\n- Add /api/auth/* endpoints \\(register, login, recovery, me\\)\n- Add to_dict\\(\\) methods to User, Pump, Recipe models\n- Add frontend config.js for auto-detecting local vs production API\n- Remove legacy /templates, /static, /__pycache__ directories\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)"
+    ]
+  }
+}
