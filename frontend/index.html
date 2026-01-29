@@ -11,12 +11,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="css/styles.css">
 
-    <!-- API Configuration -->
-    <script>
-        // Configure API base URL for your Raspberry Pi backend
-        // In production, this should be your Cloudflare Tunnel URL
-        window.API_BASE_URL = 'https://api.mixmasterai.app'; // Empty = same origin, or set to: 'https://your-tunnel.trycloudflare.com'
-    </script>
+    <!-- API Configuration (auto-detects local vs production) -->
+    <script src="js/config.js"></script>
 </head>
 
 <body class="bg-slate-900 text-white min-h-[100dvh] flex flex-col overflow-hidden">

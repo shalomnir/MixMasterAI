@@ -1,10 +1,20 @@
 import os
 import re
-from flask import Flask, redirect, url_for, flash, request, jsonify, make_response
 import json
+import time
+import threading
+import jwt
 from datetime import datetime, timedelta
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from functools import wraps
+from html import escape
+
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from sqlalchemy import update
+from sqlalchemy.exc import SQLAlchemyError
+
 from models import db, User, Recipe, Pump, PourHistory, MachineState
+
 # --- GPIO Configuration & Hardware Interface ---
 # Active-High Relay Logic: GPIO.HIGH = Relay ON (pump running), GPIO.LOW = Relay OFF (pump stopped)
 GPIO_AVAILABLE = False
@@ -19,66 +29,36 @@ except ImportError:
 
 
 def initialize_pump_pin(pin_number):
-    """
-    Initialize a GPIO pin for pump control (Active-High relay).
-    Sets pin as OUTPUT and immediately sets LOW to ensure pump is OFF.
-    
-    Args:
-        pin_number (int): The BCM GPIO pin number
-    """
+    """Initialize a GPIO pin for pump control (Active-High relay)."""
     if GPIO_AVAILABLE and pin_number:
         GPIO.setup(pin_number, GPIO.OUT)
-        GPIO.output(pin_number, GPIO.LOW)  # LOW = OFF for Active-High relay
+        GPIO.output(pin_number, GPIO.LOW)
         print(f"📌 Pin {pin_number} initialized as OUTPUT (set LOW - pump OFF)")
 
 
 def pour_ingredient(pin_number, duration, pump_id=None):
-    """
-    Control the pump to pour ingredient using Active-High relay logic.
-    Handles both Simulation Mode and Real GPIO Mode.
-    
-    Active-High Logic:
-        - GPIO.HIGH = Relay activated = Pump ON (pouring)
-        - GPIO.LOW  = Relay deactivated = Pump OFF (stopped)
-    
-    Args:
-        pin_number (int): The BCM GPIO pin number (from Pump.pin_number in database)
-        duration (float): How long to run the pump in seconds
-        pump_id (int, optional): The pump ID for logging purposes
-    """
-    import time
-    
+    """Control the pump to pour ingredient using Active-High relay logic."""
     pump_label = f"Pump {pump_id}" if pump_id else f"Pin {pin_number}"
-    
+
     if not GPIO_AVAILABLE:
-        # --- SIMULATION MODE ---
         print(f"🧪 [SIMULATION] START: {pump_label} (Pin {pin_number}) running for {duration:.2f}s")
         time.sleep(duration)
         print(f"🧪 [SIMULATION] STOP: {pump_label} finished")
         return True
-    
-    # --- REAL HARDWARE MODE (Active-Low relay) ---
+
     if not pin_number:
         print(f"❌ {pump_label} has no pin assigned - SKIPPED")
         return False
-    
+
     try:
-        # Ensure pin is configured as output with initial LOW state (OFF)
         GPIO.setup(pin_number, GPIO.OUT, initial=GPIO.LOW)
-        
-        # ACTIVE-HIGH: Set pin HIGH to turn pump ON
         GPIO.output(pin_number, GPIO.HIGH)
         print(f"⚡ [HARDWARE] {pump_label} (Pin {pin_number}) ON - Pouring...")
-        
         time.sleep(duration)
-        
-        # ACTIVE-HIGH: Set pin LOW to turn pump OFF
         GPIO.output(pin_number, GPIO.LOW)
         print(f"⚡ [HARDWARE] {pump_label} (Pin {pin_number}) OFF - Complete")
         return True
-        
     except Exception as e:
-        # Safety: Ensure pin is set LOW (OFF) on any error
         try:
             GPIO.output(pin_number, GPIO.LOW)
         except:
@@ -87,748 +67,610 @@ def pour_ingredient(pin_number, duration, pump_id=None):
         return False
 
 
-from sqlalchemy import update
-from sqlalchemy.exc import SQLAlchemyError
-from html import escape
-from functools import wraps
-import threading
-
+# --- Flask App Setup ---
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'yoursecretkey123'  # IMPORTANT: Change for production!
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'yoursecretkey123')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///cocktails.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# Permanent session configuration (12-hour lifetime)
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'None' # Changed to None for cross-site if needed, or keep Strict if same domain
-app.config['SESSION_COOKIE_SECURE'] = True # Secure required for None
 
-from flask_cors import CORS
-# Allow both localhost (dev) and production app
-CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": ["http://localhost:5000", "http://127.0.0.1:5500", "https://mixmasterai.app", "https://api.mixmasterai.app"]}})
+JWT_SECRET = app.config['SECRET_KEY']
+JWT_ALGORITHM = 'HS256'
+JWT_EXPIRY_HOURS = 72
+
+CORS(app, supports_credentials=True, resources={r"/api/*": {
+    "origins": ["http://localhost:5000", "http://127.0.0.1:5500", "http://127.0.0.1:5000",
+                "https://mixmasterai.app", "https://api.mixmasterai.app"],
+}})
 
 db.init_app(app)
 
-login_manager = LoginManager()
-login_manager.login_view = 'index'
-login_manager.init_app(app)
+# --- JWT Utilities ---
 
-# Helper for Admin Auth (Cookie OR Header)
+def create_token(user_id, is_admin=False):
+    payload = {
+        'user_id': user_id,
+        'is_admin': is_admin,
+        'exp': datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS),
+        'iat': datetime.utcnow(),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def decode_token(token):
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
+
+
+def get_current_user():
+    """Extract user from Authorization header. Returns (User, is_admin) or (None, False)."""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return None, False
+
+    token = auth_header[7:]
+
+    # Admin transient session token
+    if token == 'admin-session-token':
+        return None, True
+
+    payload = decode_token(token)
+    if not payload:
+        return None, False
+
+    if payload.get('is_admin'):
+        return None, True
+
+    user = User.query.get(payload.get('user_id'))
+    return user, False
+
+
+def login_required(f):
+    """Decorator requiring a valid JWT token."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user, is_admin = get_current_user()
+        if not user and not is_admin:
+            return jsonify({'status': 'error', 'message': 'Authentication required'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
 def check_admin_auth():
-    # 1. Check Magic Header (Transient Session)
-    auth_header = request.headers.get('Authorization')
-    if auth_header == 'Bearer admin-session-token':
-        return True
-    
-    # 2. Check Legacy Cookie
-    admin_password = request.cookies.get('admin_password')
-    if admin_password == 'COCKTAIL2026':
-        return True
+    """Check if request has admin privileges."""
+    _, is_admin = get_current_user()
+    return is_admin
 
-    # 3. Check Flask Login (if User is Admin)
-    if current_user.is_authenticated and getattr(current_user, 'is_admin', False):
-        return True
-        
-    return False
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
 
 # --- Security Utilities ---
+
 def validate_nickname(nickname):
-    """Validate and sanitize nickname input"""
     if not nickname or not nickname.strip():
         return None, "Nickname cannot be empty"
-    
     nickname = nickname.strip()
-    
-    # Length validation (2-50 chars)
     if len(nickname) < 2:
         return None, "Nickname must be at least 2 characters"
     if len(nickname) > 50:
         return None, "Nickname must be less than 50 characters"
-    
-    # Allow only alphanumeric, spaces, and basic punctuation
     if not re.match(r'^[a-zA-Z0-9\s._-]+$', nickname):
         return None, "Nickname can only contain letters, numbers, spaces, dots, underscores, and hyphens"
-    
-    # Escape HTML to prevent XSS
     nickname = escape(nickname)
-    
     return nickname, None
 
-def admin_required(f):
-    """Decorator to require admin authentication"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated:
-            flash("Please log in first", "error")
-            return redirect(url_for('index'))
-        if current_user.nickname != "Admin2001":
-            flash("Unauthorized: Admin access required", "error")
-            return redirect(url_for('menu'))
-        return f(*args, **kwargs)
-    return decorated_function
 
 @app.after_request
 def security_headers(response):
-    """Add security headers to all responses"""
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
-    # Only add HSTS in production with HTTPS
-    # response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response
 
-# --- Auth Wall ---
-@app.before_request
-def check_auth():
-    """Global auth wall - redirect unauthorized users to landing page"""
-    from flask import session
-    
-    # Define public routes (accessible without authentication)
-    public_routes = ['index', 'recovery', 'static']
-    
-    # Allow public routes
-    if request.endpoint in public_routes:
-        return None
-    
-    # Allow admin dashboard route (has its own cookie-based auth)
-    if request.endpoint == 'admin_dashboard':
-        return None
-    
-    # Allow API endpoints that have their own auth checks
-    if request.endpoint and request.endpoint.startswith('admin_api'):
-        return None
-    
-    # Redirect unauthenticated users to landing page
-    if not current_user.is_authenticated:
-        flash('Please log in to access this page.', 'error')
-        return redirect(url_for('index'))
 
-# --- CLI Commands ---
-@app.cli.command("init-db")
-def init_db_command():
-    """Create database tables and predefined data."""
-    with app.app_context():
-        db.create_all()
-        
-        # Create Pumps if not exist
-        if Pump.query.count() == 0:
-            pumps = [
-                Pump(id=1, ingredient_name='Vodka', is_active=True),
-                Pump(id=2, ingredient_name='Orange Juice', is_active=True),
-                Pump(id=3, ingredient_name='Blue Curacao', is_active=True),
-                Pump(id=4, ingredient_name='Sprite', is_active=True),
-                Pump(id=5, ingredient_name='Empty', is_active=False),
-                Pump(id=6, ingredient_name='Empty', is_active=False),
-                Pump(id=7, ingredient_name='Empty', is_active=False),
-                Pump(id=8, ingredient_name='Empty', is_active=False)
-            ]
-            db.session.add_all(pumps)
-            
-            # Create a sample recipe
-            vodka_oj = Recipe(
-                name='Screwdriver', 
-                points_reward=15, 
-                ingredients_json='{"1": 2, "2": 4}' # 2 sec vodka, 4 sec OJ
-            )
-            # Create a sample recipe 2
-            blue_lagoon = Recipe(
-                name='Blue Lagoon',
-                points_reward=20,
-                ingredients_json='{"1": 2, "3": 2, "4": 4}'
-            )
-            
-            db.session.add(vodka_oj)
-            db.session.add(blue_lagoon)
-            
-            # Initialize MachineState
-            machine_state = MachineState(id=1, is_pouring=False)
-            db.session.add(machine_state)
-            
-            db.session.commit()
-            print("Database initialized with sample data.")
-        else:
-            print("Database already contains data.")
+# ==========================================================================
+# AUTH ENDPOINTS
+# ==========================================================================
 
-# --- Routes ---
+@app.route('/api/auth/register', methods=['POST'])
+def auth_register():
+    """Register a new user. Returns JWT token."""
+    data = request.get_json() or {}
+    nickname = data.get('nickname', '')
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    # Check for persistent cookie
-    user_id_cookie = request.cookies.get('user_id')
-    if user_id_cookie:
-        try:
-            user = User.query.get(int(user_id_cookie))
-            if user:
-                login_user(user)
-                return redirect(url_for('menu'))
-        except Exception:
-            pass
-    
-    if current_user.is_authenticated:
-        return redirect(url_for('menu'))
-    
-    if request.method == 'POST':
-        # Check if this is an AJAX request
-        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-        
-        nickname = request.form.get('nickname', '')
-        
-        # --- ADMIN BYPASS LOGIC ---
-        # Immediate redirect for Admin2001 - No DB entry, no session
-        if nickname == "Admin2001":
-            response = make_response(redirect(url_for('admin_dashboard')))
-            response.set_cookie(
-                'admin_password',
-                'COCKTAIL2026',
-                max_age=3600,
-                httponly=True,
-                samesite='Strict'
-            )
-            flash('Welcome, Admin! Access granted via bypass.', 'success')
-            return response
-        # ---------------------------
-        
-        # Use validation function
-        validated_nickname, error = validate_nickname(nickname)
-        if error:
-            return jsonify({'status': 'error', 'message': error}), 400
-        
-        try:
-            # Check if nickname already exists - PREVENT DUPLICATE
-            existing_user = User.query.filter_by(nickname=validated_nickname).first()
-            
-            if existing_user:
-                # Return error for duplicate nickname
-                error_msg = 'Nickname already taken. Please choose another one.'
-                return jsonify({'status': 'error', 'message': error_msg}), 400
-            else:
-                # Create new user with auto-generated recovery key
-                recovery_key = User.generate_recovery_key()
-                user = User(nickname=validated_nickname, recovery_key=recovery_key)
-                db.session.add(user)
-                db.session.commit()
-                flash(f"Welcome, {validated_nickname}! Your account has been created.", "success")
-            
-            # Login user with permanent session
-            login_user(user, remember=True)
-            from flask import session
-            session.permanent = True
-            
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            error_msg = 'Database error. Please try again.'
-            return jsonify({'status': 'error', 'message': error_msg}), 500
-        
-        # Redirect to menu (session is already set by login_user)
-        # Redirect to menu (session is already set by login_user)
-        return jsonify({'status': 'success', 'redirect': url_for('menu')})
-            
-    return jsonify({'status': 'error', 'message': 'GET not supported for index'}), 405
+    validated_nickname, error = validate_nickname(nickname)
+    if error:
+        return jsonify({'status': 'error', 'message': error}), 400
 
-@app.route('/recovery', methods=['GET', 'POST'])
-def recovery():
-    """Account recovery using recovery key"""
-    if request.method != 'POST':
-         return jsonify({'status': 'error', 'message': 'Method not allowed'}), 405
+    try:
+        existing = User.query.filter_by(nickname=validated_nickname).first()
+        if existing:
+            return jsonify({'status': 'error', 'message': 'Nickname already taken. Please choose another one.'}), 400
 
-    # If already logged in, redirect to menu
-    if current_user.is_authenticated:
-        return jsonify({'status': 'success', 'redirect': url_for('menu')})
-    
-    if request.method == 'POST':
-        recovery_key = request.form.get('recovery_key', '').strip().upper()
-        
-        if not recovery_key:
-            return jsonify({'status': 'error', 'message': 'Please enter a recovery key.'}), 400
-        
-        # Validate recovery key format (6 alphanumeric characters)
-        if len(recovery_key) != 6 or not recovery_key.isalnum():
-            return jsonify({'status': 'error', 'message': 'Invalid recovery key format.'}), 400
-        
-        try:
-            # Find user by recovery key
-            user = User.query.filter_by(recovery_key=recovery_key).first()
-            
-            if user:
-                # Login user with permanent session
-                login_user(user, remember=True)
-                from flask import session
-                session.permanent = True
-                
-                return jsonify({'status': 'success', 'message': f'Welcome back, {user.nickname}!', 'redirect': url_for('menu')})
-            else:
-                 return jsonify({'status': 'error', 'message': 'Invalid recovery key.'}), 400
-                
-        except SQLAlchemyError:
-             return jsonify({'status': 'error', 'message': 'Database error.'}), 500
-    
-    return jsonify({'status': 'error', 'message': 'Invalid request'}), 400
+        recovery_key = User.generate_recovery_key()
+        user = User(nickname=validated_nickname, recovery_key=recovery_key)
+        db.session.add(user)
+        db.session.commit()
 
-@app.route('/menu')
-@login_required
-def menu():
-    # Group recipes by category
-    classic_cocktails = Recipe.query.filter_by(category='classic').all()
-    highballs = Recipe.query.filter_by(category='highball').all()
-    shots = Recipe.query.filter_by(category='shot').all()
-    
-    machine_state = MachineState.get_instance()
-    machine_state = MachineState.get_instance()
-    # Converted to JSON output instead of render_template for purity, 
-    # though user typically accesses /menu via frontend. 
-    # For now, we will return data that the frontend would have needed.
+        token = create_token(user.id)
+        return jsonify({
+            'status': 'success',
+            'token': token,
+            'user': user.to_dict(),
+        })
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': 'Database error. Please try again.'}), 500
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    """Login existing user by nickname, or admin by Admin2001."""
+    data = request.get_json() or {}
+    nickname = data.get('nickname', '').strip()
+
+    if not nickname:
+        return jsonify({'status': 'error', 'message': 'Nickname required'}), 400
+
+    # Admin bypass
+    if nickname == 'Admin2001':
+        return jsonify({
+            'status': 'success',
+            'token': 'admin-session-token',
+            'is_admin': True,
+        })
+
+    user = User.query.filter_by(nickname=nickname).first()
+    if not user:
+        return jsonify({'status': 'error', 'message': 'User not found. Register first or use recovery key.'}), 404
+
+    token = create_token(user.id)
     return jsonify({
-        'classic_cocktails': [c.to_dict() for c in classic_cocktails],
-        'highballs': [c.to_dict() for c in highballs],
-        'shots': [s.to_dict() for c in shots],
-        'taste_amount_ml': machine_state.taste_amount_ml
+        'status': 'success',
+        'token': token,
+        'user': user.to_dict(),
     })
 
-@app.route('/api/pumps')
+
+@app.route('/api/auth/recovery', methods=['POST'])
+def auth_recovery():
+    """Recover account using 6-char recovery key."""
+    data = request.get_json() or {}
+    recovery_key = data.get('recovery_key', '').strip().upper()
+
+    if not recovery_key:
+        return jsonify({'status': 'error', 'message': 'Please enter a recovery key.'}), 400
+
+    if len(recovery_key) != 6 or not recovery_key.isalnum():
+        return jsonify({'status': 'error', 'message': 'Invalid recovery key format.'}), 400
+
+    user = User.query.filter_by(recovery_key=recovery_key).first()
+    if not user:
+        return jsonify({'status': 'error', 'message': 'Invalid recovery key.'}), 400
+
+    token = create_token(user.id)
+    return jsonify({
+        'status': 'success',
+        'token': token,
+        'user': user.to_dict(),
+    })
+
+
+@app.route('/api/auth/me', methods=['GET'])
+@login_required
+def auth_me():
+    """Get current authenticated user info."""
+    user, is_admin = get_current_user()
+    if is_admin and not user:
+        return jsonify({'status': 'success', 'user': {'nickname': 'Admin', 'is_admin': True}})
+    return jsonify({'status': 'success', 'user': user.to_dict()})
+
+
+# ==========================================================================
+# PUBLIC ENDPOINTS
+# ==========================================================================
+
+@app.route('/api/recipes', methods=['GET'])
+def get_recipes():
+    """Get all recipes grouped by category."""
+    classic = Recipe.query.filter_by(category='classic').all()
+    highballs = Recipe.query.filter_by(category='highball').all()
+    shots = Recipe.query.filter_by(category='shot').all()
+    machine_state = MachineState.get_instance()
+
+    return jsonify({
+        'status': 'success',
+        'classic_cocktails': [r.to_dict() for r in classic],
+        'highballs': [r.to_dict() for r in highballs],
+        'shots': [r.to_dict() for r in shots],
+        'taste_amount_ml': machine_state.taste_amount_ml,
+    })
+
+
+@app.route('/api/pumps', methods=['GET'])
 def get_pumps():
-    """API endpoint to get pump information"""
+    """Get pump info and global volume settings."""
     pumps = Pump.query.all()
     pump_data = {}
     for pump in pumps:
         pump_data[str(pump.id)] = {
             'name': pump.ingredient_name,
-            'is_alcohol': pump.is_alcohol,  # Send alcohol flag
-            'is_virtual': pump.is_virtual,  # NEW: Send virtual pump flag
-            'seconds_per_50ml': pump.seconds_per_50ml  # Send calibration data
+            'is_alcohol': pump.is_alcohol,
+            'is_virtual': pump.is_virtual,
+            'seconds_per_50ml': pump.seconds_per_50ml,
         }
-    
-    # Include all global volume settings in response
+
     machine_state = MachineState.get_instance()
     return jsonify({
         'pumps': pump_data,
         'classic_target_vol': machine_state.classic_target_vol,
         'highball_target_vol': machine_state.highball_target_vol,
         'shot_target_vol': machine_state.shot_target_vol,
-        'taste_amount_ml': machine_state.taste_amount_ml
+        'taste_amount_ml': machine_state.taste_amount_ml,
     })
 
-@app.route('/pour/<int:recipe_id>', methods=['POST'])
+
+@app.route('/api/status', methods=['GET'])
+def api_status():
+    """Machine pouring status."""
+    machine_state = MachineState.get_instance()
+    return jsonify({'is_pouring': machine_state.is_pouring})
+
+
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    """Get global machine settings."""
+    machine_state = MachineState.get_instance()
+    return jsonify({
+        'classic_target_vol': machine_state.classic_target_vol,
+        'highball_target_vol': machine_state.highball_target_vol,
+        'shot_target_vol': machine_state.shot_target_vol,
+        'taste_amount_ml': machine_state.taste_amount_ml,
+        'is_pouring': machine_state.is_pouring,
+    })
+
+
+@app.route('/api/leaderboard', methods=['GET'])
+def get_leaderboard():
+    """Top 10 users (excluding Admin2001)."""
+    users = User.query.filter(User.nickname != 'Admin2001').order_by(User.points.desc()).limit(10).all()
+    return jsonify({'users': [u.to_dict() for u in users]})
+
+
+@app.route('/api/statistics/global', methods=['GET'])
+def get_global_statistics():
+    """Global platform statistics."""
+    all_pours = PourHistory.query.all()
+    total_alcohol_ml = sum(p.points_awarded or 0 for p in all_pours)
+    return jsonify({
+        'status': 'success',
+        'total_alcohol_liters': round(total_alcohol_ml / 1000.0, 2),
+        'total_cocktails_poured': len(all_pours),
+    })
+
+
+# ==========================================================================
+# AUTHENTICATED USER ENDPOINTS
+# ==========================================================================
+
+@app.route('/api/pour/<int:recipe_id>', methods=['POST'])
 @login_required
 def pour_cocktail(recipe_id):
-    # Atomic compare-and-swap for machine state (prevents race conditions)
+    """Pour a cocktail. Requires auth."""
+    user, is_admin = get_current_user()
+    if not user:
+        return jsonify({'status': 'error', 'message': 'User account required to pour'}), 403
+
+    # Atomic lock
     result = db.session.execute(
         update(MachineState)
         .where(MachineState.id == 1, MachineState.is_pouring == False)
         .values(is_pouring=True)
     )
     db.session.commit()
-    
-    # Check if we successfully acquired the lock
+
     if result.rowcount == 0:
-        return jsonify({
-            'status': 'error',
-            'message': 'Oops! Someone beat you to it! The machine is currently busy.'
-        }), 400
-    
-    # Get machine state instance for later use
+        return jsonify({'status': 'error', 'message': 'Machine is currently busy.'}), 400
+
     machine_state = MachineState.get_instance()
-    
+
     try:
-        # Get is_strong and is_taste flags from request
         data = request.get_json() or {}
         is_strong = data.get('is_strong', False)
         is_taste = data.get('is_taste', False)
-        
+
         recipe = Recipe.query.get_or_404(recipe_id)
         ingredients = recipe.get_ingredients()
-        category = recipe.category  # Get drink category (classic, highball, or shot)
-        
-        # Calculate proportional recipe based on drink category
-        # CATEGORY MODE: Scale to category-specific target volume
-        # TASTE MODE: Override with taste_amount_ml regardless of category
-        
+        category = recipe.category
+
+        # Target volume
         if is_taste:
-            # Tasting mode overrides category volume
             target_volume = machine_state.taste_amount_ml
+        elif category == 'highball':
+            target_volume = machine_state.highball_target_vol
+        elif category == 'shot':
+            target_volume = machine_state.shot_target_vol
         else:
-            # Use category-specific target volume
-            if category == 'highball':
-                target_volume = machine_state.highball_target_vol
-            elif category == 'shot':
-                target_volume = machine_state.shot_target_vol
-            else:  # default to 'classic'
-                target_volume = machine_state.classic_target_vol
-        
-        # Scaling Logic (Standardized)
-        # Formula: Ingredient_Vol_new = (Ingredient_Vol_original / Total_Recipe_Vol) * Target_Vol_category
-        
-        # Step 1: Calculate total ml from original recipe
+            target_volume = machine_state.classic_target_vol
+
         original_total = sum(float(ml) for ml in ingredients.values())
-        
         if original_total == 0:
             return jsonify({'status': 'error', 'message': 'Invalid recipe: Zero volume.'}), 400
 
-        # Step 2: Calculate actual ml based on target volume
-        calculated_ingredients = {}
+        # Scale ingredients
+        calculated = {}
         for pump_id, orig_ml in ingredients.items():
-            # Apply the scaling formula
-            calculated_ingredients[pump_id] = (float(orig_ml) / original_total) * target_volume
-        
-        # Step 3: Strong Mode (1.5x alcohol)
-        # This increases the final volume and the alcohol amount
+            calculated[pump_id] = (float(orig_ml) / original_total) * target_volume
+
+        # Strong mode: 1.5x alcohol
         if is_strong:
-            for pump_id in calculated_ingredients.keys():
-                pump = Pump.query.get(int(pump_id))
+            for pid in calculated:
+                pump = Pump.query.get(int(pid))
                 if pump and pump.is_alcohol:
-                    calculated_ingredients[pump_id] = calculated_ingredients[pump_id] * 1.5
-        
-        # Pour process with ML-based calibration (PARALLEL EXECUTION)
-        # All pumps are activated via GPIO - no virtual pump handling
+                    calculated[pid] *= 1.5
+
+        # Pour (parallel threads)
         threads = []
         durations = []
-        
-        for pump_id_str, ml_amount in calculated_ingredients.items():
-            pump_id = int(pump_id_str)
-            pump = Pump.query.get(pump_id)
-            
+        for pump_id_str, ml_amount in calculated.items():
+            pump = Pump.query.get(int(pump_id_str))
             if not pump:
                 continue
-            
-            # Get dynamic pin_number from database (set via Admin UI)
             pin_number = pump.pin_number
-            
-            # Initialize pin to HIGH (OFF) before pouring to prevent auto-start
             initialize_pump_pin(pin_number)
-                
-            # Convert ML to seconds using calibration: Time = (ML / 50) * seconds_per_50ml
             duration = (ml_amount / 50.0) * pump.seconds_per_50ml
             durations.append(duration)
-            
-            # Create and start a thread for GPIO activation
-            # Pass pin_number (dynamic from DB), duration, and pump_id (for logging)
-            thread = threading.Thread(target=pour_ingredient, args=(pin_number, duration, pump_id))
-            threads.append(thread)
-            thread.start()
-        
-        # Wait for all pumps to finish
-        for thread in threads:
-            thread.join()
-        
-        # Total duration is the longest pump duration (since they run in parallel)
+            t = threading.Thread(target=pour_ingredient, args=(pin_number, duration, pump.id))
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join()
+
         total_duration = max(durations) if durations else 0
-        
-        # Calculate points based on actual alcohol poured (1 point per 1 ml)
-        total_alcohol_ml = 0
-        for pump_id_str, ml_amount in calculated_ingredients.items():
-            pump = Pump.query.get(int(pump_id_str))
-            if pump and pump.is_alcohol:
-                total_alcohol_ml += ml_amount
-        
-        # Points = total alcohol ml (rounded to nearest integer)
+
+        # Points
+        total_alcohol_ml = sum(
+            ml for pid, ml in calculated.items()
+            if Pump.query.get(int(pid)) and Pump.query.get(int(pid)).is_alcohol
+        )
         points_earned = round(total_alcohol_ml)
-        
-        current_user.points += points_earned
-        
-        # Record History with is_strong flag and points_awarded
+        user.points += points_earned
+
         history = PourHistory(
-            user_id=current_user.id, 
-            recipe_id=recipe.id,
-            is_strong=is_strong,
-            points_awarded=points_earned
+            user_id=user.id, recipe_id=recipe.id,
+            is_strong=is_strong, points_awarded=points_earned
         )
         db.session.add(history)
         db.session.commit()
-        
-        # Build message based on pour type
+
         mode_text = ""
         if is_taste:
             mode_text = " 🥄 TASTE!"
         if is_strong:
             mode_text += " 💪 STRONG!"
-        
-        # Highball specific notification
+
         is_highball = (category == 'highball' and not is_taste)
-        highball_msg = " Base poured! Please top up with Soda/Tonic for the perfect balance." if is_highball else ""
+        highball_msg = " Base poured! Please top up with Soda/Tonic." if is_highball else ""
 
         return jsonify({
             'status': 'success',
-            'message': f'Cheers! {points_earned} points added to your profile.{mode_text}{highball_msg}',
-            'new_points': current_user.points,
+            'message': f'Cheers! {points_earned} points added.{mode_text}{highball_msg}',
+            'new_points': user.points,
             'points_added': points_earned,
             'total_duration': total_duration,
-            'is_highball': is_highball
+            'is_highball': is_highball,
         })
-    
+
     except Exception as e:
-        # Catch ANY exception during pour process
         import traceback
-        error_details = traceback.format_exc()
-        print(f"ERROR in pour_cocktail: {str(e)}")
-        print(error_details)
-        
-        # Rollback any uncommitted database changes
+        traceback.print_exc()
         db.session.rollback()
-        
-        return jsonify({
-            'status': 'error',
-            'message': f'Pour failed: {str(e)}'
-        }), 500
-    
+        return jsonify({'status': 'error', 'message': f'Pour failed: {str(e)}'}), 500
+
     finally:
-        # Always release the lock - use direct update to avoid stale object issues
         try:
-            db.session.execute(
-                update(MachineState)
-                .where(MachineState.id == 1)
-                .values(is_pouring=False)
-            )
+            db.session.execute(update(MachineState).where(MachineState.id == 1).values(is_pouring=False))
             db.session.commit()
-        except Exception as e:
-            # If commit fails, rollback and try one more time
+        except Exception:
             db.session.rollback()
             try:
-                db.session.execute(
-                    update(MachineState)
-                    .where(MachineState.id == 1)
-                    .values(is_pouring=False)
-                )
+                db.session.execute(update(MachineState).where(MachineState.id == 1).values(is_pouring=False))
                 db.session.commit()
-            except Exception as final_error:
-                # Log error but don't raise - we don't want to break the response
-                print(f"CRITICAL: Failed to release machine lock: {final_error}")
+            except Exception as fe:
+                print(f"CRITICAL: Failed to release machine lock: {fe}")
 
-@app.route('/leaderboard')
-def leaderboard():
-    # Top 10 users (excluding Admin2001)
-    users = User.query.filter(User.nickname != 'Admin2001').order_by(User.points.desc()).limit(10).all()
-    # return render_template('leaderboard.html', users=users)
-    return jsonify({'users': [u.to_dict() for u in users]})
 
-@app.route('/api/user/rank')
+@app.route('/api/user/rank', methods=['GET'])
 @login_required
 def get_user_rank():
-    """Get current user's rank and position information"""
-    # Get all users sorted by points (excluding Admin2001)
+    user, _ = get_current_user()
+    if not user:
+        return jsonify({'status': 'error', 'message': 'User required'}), 403
+
     all_users = User.query.filter(User.nickname != 'Admin2001').order_by(User.points.desc()).all()
-    
-    # Find current user's position
-    current_position = None
+    position = None
     player_ahead = None
-    points_behind = 0
-    
-    for idx, user in enumerate(all_users):
-        if user.id == current_user.id:
-            current_position = idx + 1  # 1-indexed position
-            if idx > 0:  # There's someone ahead
+
+    for idx, u in enumerate(all_users):
+        if u.id == user.id:
+            position = idx + 1
+            if idx > 0:
                 player_ahead = all_users[idx - 1]
-                points_behind = player_ahead.points - current_user.points
             break
-    
-    if current_position is None:
+
+    if position is None:
         return jsonify({'status': 'error', 'message': 'User not found'}), 404
-    
+
     return jsonify({
         'status': 'success',
-        'position': current_position,
+        'position': position,
         'total_users': len(all_users),
         'player_ahead': {
             'nickname': player_ahead.nickname,
             'points': player_ahead.points,
-            'points_behind': points_behind
-        } if player_ahead else None
+            'points_behind': player_ahead.points - user.points,
+        } if player_ahead else None,
     })
 
-@app.route('/api/user/statistics')
+
+@app.route('/api/user/statistics', methods=['GET'])
 @login_required
 def get_user_statistics():
-    """Get current user's personal statistics"""
-    try:
-        # Get all pour history for current user
-        user_history = PourHistory.query.filter_by(user_id=current_user.id).all()
-        
-        # Initialize statistics
-        total_alcohol_ml = 0
-        favorite_cocktail = None
-        strong_mode_percentage = 0
-        current_rank = 0
-        
-        # Calculate total alcohol consumed
-        machine_state = MachineState.get_instance()
-        recipe_counts = {}  # Track cocktail frequency for favorite
-        
-        for pour in user_history:
-            recipe = Recipe.query.get(pour.recipe_id)
-            if not recipe:
-                continue
-            
-            # Count for favorite cocktail
-            recipe_name = recipe.name
-            recipe_counts[recipe_name] = recipe_counts.get(recipe_name, 0) + 1
-            
-            # Alcohol consumed = points awarded (1:1 ratio in new logic)
-            total_alcohol_ml += pour.points_awarded if pour.points_awarded else 0
-        
-        # Calculate favorite cocktail (most frequently poured)
-        if recipe_counts:
-            favorite_cocktail = max(recipe_counts, key=recipe_counts.get)
-        
-        # Calculate Strong Mode %
-        total_pours = len(user_history)
-        if total_pours > 0:
-            strong_pours = sum(1 for pour in user_history if pour.is_strong)
-            strong_mode_percentage = round((strong_pours / total_pours) * 100, 1)
-        
-        # Calculate current rank (reuse logic from get_user_rank)
-        all_users = User.query.filter(User.nickname != 'Admin2001').order_by(User.points.desc()).all()
-        for idx, user in enumerate(all_users):
-            if user.id == current_user.id:
-                current_rank = idx + 1
-                break
-        
-        return jsonify({
-            'status': 'success',
-            'total_alcohol_ml': round(total_alcohol_ml, 1),
-            'favorite_cocktail': favorite_cocktail,
-            'current_rank': current_rank,
-            'strong_mode_percentage': strong_mode_percentage,
-            'total_pours': total_pours
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': f'Error calculating statistics: {str(e)}'
-        }), 500
+    user, _ = get_current_user()
+    if not user:
+        return jsonify({'status': 'error', 'message': 'User required'}), 403
 
-@app.route('/api/user/<int:user_id>/statistics')
-@login_required
-def get_public_user_statistics(user_id):
-    """Get any user's public statistics (for leaderboard modal)"""
-    try:
-        # Get the target user
-        target_user = User.query.get(user_id)
-        if not target_user:
-            return jsonify({'status': 'error', 'message': 'User not found'}), 404
-        
-        # Get all pour history for target user
-        user_history = PourHistory.query.filter_by(user_id=user_id).all()
-        
-        # Initialize statistics
-        total_alcohol_ml = 0
-        favorite_cocktail = None
-        strong_mode_percentage = 0
-        current_rank = 0
-        
-        # Calculate total alcohol consumed
-        machine_state = MachineState.get_instance()
-        recipe_counts = {}  # Track cocktail frequency for favorite
-        
-        for pour in user_history:
-            recipe = Recipe.query.get(pour.recipe_id)
-            if not recipe:
-                continue
-            
-            # Count for favorite cocktail
-            recipe_name = recipe.name
-            recipe_counts[recipe_name] = recipe_counts.get(recipe_name, 0) + 1
-            
-            # Alcohol consumed = points awarded (1:1 ratio in new logic)
-            total_alcohol_ml += pour.points_awarded if pour.points_awarded else 0
-        
-        # Calculate favorite cocktail (most frequently poured)
-        if recipe_counts:
-            favorite_cocktail = max(recipe_counts, key=recipe_counts.get)
-        
-        # Calculate Strong Mode %
-        total_pours = len(user_history)
-        if total_pours > 0:
-            strong_pours = sum(1 for pour in user_history if pour.is_strong)
-            strong_mode_percentage = round((strong_pours / total_pours) * 100, 1)
-        
-        # Calculate current rank
-        all_users = User.query.filter(User.nickname != 'Admin2001').order_by(User.points.desc()).all()
-        for idx, user in enumerate(all_users):
-            if user.id == user_id:
-                current_rank = idx + 1
-                break
-        
-        return jsonify({
-            'status': 'success',
-            'user_id': target_user.id,
-            'nickname': target_user.nickname,
-            'points': target_user.points,
-            'total_alcohol_ml': round(total_alcohol_ml, 1),
-            'favorite_cocktail': favorite_cocktail,
-            'current_rank': current_rank,
-            'strong_mode_percentage': strong_mode_percentage,
-            'total_pours': total_pours
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': f'Error calculating statistics: {str(e)}'
-        }), 500
+    history = PourHistory.query.filter_by(user_id=user.id).all()
+    total_alcohol_ml = 0
+    recipe_counts = {}
 
-@app.route('/api/global/statistics')
-def get_global_statistics():
-    """Get global platform statistics for leaderboard KPIs"""
-    try:
-        # Get all pour history
-        all_pours = PourHistory.query.all()
-        total_pours = len(all_pours)
-        
-        # Calculate total alcohol consumed across all users
-        total_alcohol_ml = 0
-        machine_state = MachineState.get_instance()
-        
-        for pour in all_pours:
-            # Alcohol consumed = points awarded
-            total_alcohol_ml += pour.points_awarded or 0
-        
-        # Convert to liters
-        total_alcohol_liters = total_alcohol_ml / 1000.0
-        
-        return jsonify({
-            'status': 'success',
-            'total_alcohol_liters': round(total_alcohol_liters, 2),
-            'total_cocktails_poured': total_pours
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': f'Error calculating global statistics: {str(e)}'
-        }), 500
+    for pour in history:
+        recipe = Recipe.query.get(pour.recipe_id)
+        if recipe:
+            recipe_counts[recipe.name] = recipe_counts.get(recipe.name, 0) + 1
+        total_alcohol_ml += pour.points_awarded or 0
 
+    favorite = max(recipe_counts, key=recipe_counts.get) if recipe_counts else None
+    total_pours = len(history)
+    strong_pct = round((sum(1 for p in history if p.is_strong) / total_pours) * 100, 1) if total_pours else 0
 
-@app.route('/api/status')
-def api_status():
-    """Real-time status API for machine state"""
-    machine_state = MachineState.get_instance()
-    return jsonify({
-        'is_pouring': machine_state.is_pouring
-    })
+    all_users = User.query.filter(User.nickname != 'Admin2001').order_by(User.points.desc()).all()
+    rank = next((i + 1 for i, u in enumerate(all_users) if u.id == user.id), 0)
 
-
-@app.route('/api/settings')
-def get_machine_settings_api():
-    """Get global machine settings (volume limits, etc.)"""
-    machine_state = MachineState.get_instance()
     return jsonify({
         'status': 'success',
-        'classic_target_vol': machine_state.classic_target_vol,
-        'highball_target_vol': machine_state.highball_target_vol,
-        'shot_target_vol': machine_state.shot_target_vol,
-        'taste_amount_ml': machine_state.taste_amount_ml
+        'total_alcohol_ml': round(total_alcohol_ml, 1),
+        'favorite_cocktail': favorite,
+        'current_rank': rank,
+        'strong_mode_percentage': strong_pct,
+        'total_pours': total_pours,
     })
+
+
+@app.route('/api/user/<int:user_id>/statistics', methods=['GET'])
+@login_required
+def get_public_user_statistics(user_id):
+    target = User.query.get(user_id)
+    if not target:
+        return jsonify({'status': 'error', 'message': 'User not found'}), 404
+
+    history = PourHistory.query.filter_by(user_id=user_id).all()
+    total_alcohol_ml = 0
+    recipe_counts = {}
+
+    for pour in history:
+        recipe = Recipe.query.get(pour.recipe_id)
+        if recipe:
+            recipe_counts[recipe.name] = recipe_counts.get(recipe.name, 0) + 1
+        total_alcohol_ml += pour.points_awarded or 0
+
+    favorite = max(recipe_counts, key=recipe_counts.get) if recipe_counts else None
+    total_pours = len(history)
+    strong_pct = round((sum(1 for p in history if p.is_strong) / total_pours) * 100, 1) if total_pours else 0
+
+    all_users = User.query.filter(User.nickname != 'Admin2001').order_by(User.points.desc()).all()
+    rank = next((i + 1 for i, u in enumerate(all_users) if u.id == user_id), 0)
+
+    return jsonify({
+        'status': 'success',
+        'user_id': target.id,
+        'nickname': target.nickname,
+        'points': target.points,
+        'total_alcohol_ml': round(total_alcohol_ml, 1),
+        'favorite_cocktail': favorite,
+        'current_rank': rank,
+        'strong_mode_percentage': strong_pct,
+        'total_pours': total_pours,
+    })
+
+
+@app.route('/api/profile', methods=['GET'])
+@login_required
+def get_profile():
+    user, _ = get_current_user()
+    if not user:
+        return jsonify({'status': 'error', 'message': 'User required'}), 403
+    return jsonify({'status': 'success', 'user': user.to_dict()})
+
+
+@app.route('/api/profile/delete', methods=['POST'])
+@login_required
+def delete_profile():
+    user, _ = get_current_user()
+    if not user:
+        return jsonify({'status': 'error', 'message': 'User required'}), 403
+    try:
+        PourHistory.query.filter_by(user_id=user.id).delete()
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({'status': 'success', 'message': 'Account deleted'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ==========================================================================
+# ADMIN ENDPOINTS
+# ==========================================================================
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not check_admin_auth():
+            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route('/api/admin/pumps', methods=['GET'])
+@admin_required
+def admin_get_pumps():
+    pumps = Pump.query.order_by(Pump.id).all()
+    return jsonify({'pumps': [p.to_dict() for p in pumps]})
+
+
+@app.route('/api/admin/recipes', methods=['GET'])
+@admin_required
+def admin_get_recipes():
+    recipes = Recipe.query.all()
+    return jsonify({'recipes': [r.to_dict() for r in recipes]})
+
+
+@app.route('/api/admin/users', methods=['GET'])
+@admin_required
+def admin_get_users():
+    users = User.query.all()
+    return jsonify({'users': [
+        {'id': u.id, 'nickname': u.nickname, 'points': u.points, 'is_admin': u.nickname == 'Admin2001'}
+        for u in users
+    ]})
+
+
+@app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
+@admin_required
+def admin_delete_user(user_id):
+    user = User.query.get_or_404(user_id)
+    PourHistory.query.filter_by(user_id=user_id).delete()
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({'status': 'success'})
+
+
+@app.route('/api/admin/recipes/<int:recipe_id>', methods=['DELETE'])
+@admin_required
+def admin_delete_recipe(recipe_id):
+    recipe = Recipe.query.get_or_404(recipe_id)
+    db.session.delete(recipe)
+    db.session.commit()
+    return jsonify({'status': 'success'})
 
 
 @app.route('/api/admin/update', methods=['POST'])
-def admin_api_update():
-    """Generic API endpoint for admin auto-save updates"""
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
+@admin_required
+def admin_update_entity():
+    """Generic auto-save endpoint for pump/user/recipe field updates."""
     data = request.get_json()
     if not data:
         return jsonify({'status': 'error', 'message': 'No data provided'}), 400
@@ -840,74 +682,51 @@ def admin_api_update():
 
     try:
         if entity == 'pump':
-            pump = Pump.query.get(entity_id)
+            pump = Pump.query.get(int(entity_id))
             if not pump:
                 return jsonify({'status': 'error', 'message': 'Pump not found'}), 404
-            
-            if field == 'is_active':
-                pump.is_active = bool(value)
-            elif field == 'ingredient_name':
-                pump.ingredient_name = str(value)
-            elif field == 'pin_number':
-                pump.pin_number = int(value) if value else None
+            if field == 'pin_number':
+                value = int(value) if value else None
+            elif field in ('is_active', 'is_alcohol', 'is_virtual'):
+                value = bool(int(value))
             elif field == 'seconds_per_50ml':
-                pump.seconds_per_50ml = float(value)
-            elif field == 'is_alcohol':
-                pump.is_alcohol = bool(value)
-            elif field == 'is_virtual':  # NEW
-                pump.is_virtual = bool(value)
-            
-            db.session.commit()
-            return jsonify({'status': 'success', 'message': 'Pump updated'})
+                value = float(value)
+            if hasattr(pump, field):
+                setattr(pump, field, value)
+                db.session.commit()
+                return jsonify({'status': 'success', 'message': 'Pump updated'})
+            return jsonify({'status': 'error', 'message': 'Invalid field'}), 400
 
         elif entity == 'user':
             user = User.query.get(entity_id)
             if not user:
                 return jsonify({'status': 'error', 'message': 'User not found'}), 404
-            
             if field == 'points':
                 user.points = int(value)
                 db.session.commit()
                 return jsonify({'status': 'success', 'message': 'Points updated'})
 
         elif entity == 'recipe':
-            # Create new recipe if ID is 0 or 'new'
-            if str(entity_id) == 'new':
-                 return jsonify({'status': 'error', 'message': 'Cannot auto-save new recipe before creation'}), 400
-
             recipe = Recipe.query.get(entity_id)
             if not recipe:
                 return jsonify({'status': 'error', 'message': 'Recipe not found'}), 404
-
             if field == 'name':
                 recipe.name = str(value)
             elif field == 'description':
                 recipe.description = str(value)
-            elif field == 'points_reward':
-                # Points are auto-calculated and cannot be manually edited
-                return jsonify({'status': 'error', 'message': 'Points are auto-calculated based on alcohol content'}), 400
-            elif field == 'category':  # NEW: Handle category field
-                if value in ['classic', 'highball', 'shot']:
-                    recipe.category = str(value)
-                else:
-                    return jsonify({'status': 'error', 'message': 'Invalid category'}), 400
+            elif field == 'category' and value in ('classic', 'highball', 'shot'):
+                recipe.category = str(value)
             elif field.startswith('ingredient_'):
-                # Handle single ingredient update
                 pump_id = field.split('_')[1]
-                current_ingredients = recipe.get_ingredients() # returns dict
-                
+                ings = recipe.get_ingredients()
                 amount = float(value)
                 if amount > 0:
-                    current_ingredients[pump_id] = amount
-                else:
-                    # Remove ingredient if 0
-                    if pump_id in current_ingredients:
-                        del current_ingredients[pump_id]
-                
-                recipe.ingredients_json = json.dumps(current_ingredients)
-
+                    ings[pump_id] = amount
+                elif pump_id in ings:
+                    del ings[pump_id]
+                recipe.ingredients_json = json.dumps(ings)
             db.session.commit()
-            return jsonify({'status': 'success', 'message': 'Recipe updated'})
+            return jsonify({'status': 'success', 'message': 'Updated'})
 
     except (ValueError, TypeError, OverflowError) as e:
         return jsonify({'status': 'error', 'message': f'Invalid value: {str(e)}'}), 400
@@ -918,74 +737,64 @@ def admin_api_update():
     return jsonify({'status': 'error', 'message': 'Invalid entity or field'}), 400
 
 
-
 @app.route('/api/admin/recipe/save', methods=['POST'])
-def admin_api_save_recipe():
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
+@admin_required
+def admin_save_recipe():
+    """Create or update a recipe."""
     data = request.get_json()
     recipe_id = data.get('id')
     name = data.get('name')
     description = data.get('description')
-    # points_reward is deprecated - now auto-calculated at pour time
-    ingredients = data.get('ingredients', {}) # {pump_id: float_amount}
-    category = data.get('category', 'classic')  # NEW: Get category (default to 'classic')
+    category = data.get('category', 'classic')
+    ingredients = data.get('ingredients', {})
 
     if not name or not ingredients:
-         return jsonify({'status': 'error', 'message': 'Name and at least one ingredient required'}), 400
-    
-    # Validate category
-    if category not in ['classic', 'highball', 'shot']:
-        return jsonify({'status': 'error', 'message': 'Invalid category. Must be classic, highball, or shot'}), 400
+        return jsonify({'status': 'error', 'message': 'Name and ingredients required'}), 400
+    if category not in ('classic', 'highball', 'shot'):
+        return jsonify({'status': 'error', 'message': 'Invalid category'}), 400
 
     try:
-        # Validate ingredients
-        valid_ingredients = {}
-        for pid, amount in ingredients.items():
-            if float(amount) > 0:
-                valid_ingredients[str(pid)] = float(amount)
-        
-        ingredients_json = json.dumps(valid_ingredients)
+        ingredients_json = json.dumps({str(k): float(v) for k, v in ingredients.items() if float(v) > 0})
 
-        if recipe_id: # Update
+        # Auto-calculate points
+        points_reward = 0
+        for pid, ml in ingredients.items():
+            pump = Pump.query.get(int(pid))
+            if pump and pump.is_alcohol:
+                points_reward += float(ml)
+        points_reward = round(points_reward)
+
+        if recipe_id:
             recipe = Recipe.query.get(recipe_id)
             if not recipe:
                 return jsonify({'status': 'error', 'message': 'Recipe not found'}), 404
             recipe.name = name
             recipe.description = description
-            recipe.points_reward = 0  # Deprecated field - always set to 0
+            recipe.category = category
             recipe.ingredients_json = ingredients_json
-            recipe.category = category  # NEW: Set category
-            message = 'Recipe updated successfully'
-        else: # Create
-            new_recipe = Recipe(
-                name=name,
-                description=description,
-                points_reward=0,  # Deprecated field - always set to 0
-                ingredients_json=ingredients_json,
-                category=category  # NEW: Set category
-            )
-            db.session.add(new_recipe)
-            message = 'Recipe created successfully'
-        
+            recipe.points_reward = points_reward
+            message = 'Recipe updated'
+        else:
+            recipe = Recipe(name=name, description=description, category=category,
+                            ingredients_json=ingredients_json, points_reward=points_reward)
+            db.session.add(recipe)
+            message = 'Recipe created'
+
         db.session.commit()
         return jsonify({'status': 'success', 'message': message})
-
     except Exception as e:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route('/api/admin/user/save', methods=['POST'])
-def admin_api_save_user():
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
 
+@app.route('/api/admin/user/save', methods=['POST'])
+@admin_required
+def admin_save_user():
     data = request.get_json()
     user_id = data.get('id')
     nickname = data.get('nickname')
     points = data.get('points')
-    
+
     if not nickname:
         return jsonify({'status': 'error', 'message': 'Nickname required'}), 400
 
@@ -993,28 +802,22 @@ def admin_api_save_user():
         user = User.query.get(user_id)
         if not user:
             return jsonify({'status': 'error', 'message': 'User not found'}), 404
-        
-        # Check uniqueness if nickname changed
         if user.nickname != nickname:
-            existing = User.query.filter_by(nickname=nickname).first()
-            if existing: # Nickname taken
+            if User.query.filter_by(nickname=nickname).first():
                 return jsonify({'status': 'error', 'message': 'Nickname already taken'}), 400
             user.nickname = nickname
-
-        user.points = int(points) if points is not None else user.points
-        
+        if points is not None:
+            user.points = int(points)
         db.session.commit()
-        return jsonify({'status': 'success', 'message': 'User updated successfully'})
-
+        return jsonify({'status': 'success', 'message': 'User updated'})
     except Exception as e:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route('/api/admin/action', methods=['POST'])
-def admin_api_action():
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
 
+@app.route('/api/admin/action', methods=['POST'])
+@admin_required
+def admin_action():
     data = request.get_json()
     action = data.get('action')
     target_id = data.get('id')
@@ -1024,61 +827,50 @@ def admin_api_action():
             Recipe.query.filter_by(id=target_id).delete()
             db.session.commit()
             return jsonify({'status': 'success', 'message': 'Recipe deleted'})
-
         elif action == 'delete_user':
-            # Delete history first
             PourHistory.query.filter_by(user_id=target_id).delete()
             User.query.filter_by(id=target_id).delete()
             db.session.commit()
             return jsonify({'status': 'success', 'message': 'User deleted'})
-
         elif action == 'delete_all_users':
-            PourHistory.query.delete() # Wipe history
-            User.query.delete() # Wipe all users
+            PourHistory.query.delete()
+            User.query.delete()
             db.session.commit()
             return jsonify({'status': 'success', 'message': 'All users deleted'})
-
         elif action == 'reset_points':
-            users = User.query.all()
-            for user in users:
-                user.points = 0
+            for u in User.query.all():
+                u.points = 0
             db.session.commit()
             return jsonify({'status': 'success', 'message': 'All points reset'})
-
     except Exception as e:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 500
-    
+
     return jsonify({'status': 'error', 'message': 'Invalid action'}), 400
 
+
 @app.route('/api/admin/category-volumes', methods=['GET', 'POST'])
-def admin_api_category_volumes():
-    """Admin API endpoint to get/set all category volumes"""
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-    
+@admin_required
+def admin_category_volumes():
     machine_state = MachineState.get_instance()
-    
+
     if request.method == 'GET':
         return jsonify({
             'status': 'success',
             'classic_target_vol': machine_state.classic_target_vol,
             'highball_target_vol': machine_state.highball_target_vol,
-            'shot_target_vol': machine_state.shot_target_vol
+            'shot_target_vol': machine_state.shot_target_vol,
         })
-    
-    # POST - Update category volumes
+
     data = request.get_json()
     category = data.get('category')
     volume = data.get('volume')
-    
+
     if not category or not volume:
         return jsonify({'status': 'error', 'message': 'category and volume required'}), 400
-    
+
     try:
         volume = int(volume)
-        
-        # Update based on category (no validation - allow any positive value)
         if category == 'classic':
             machine_state.classic_target_vol = volume
         elif category == 'highball':
@@ -1087,338 +879,77 @@ def admin_api_category_volumes():
             machine_state.shot_target_vol = volume
         else:
             return jsonify({'status': 'error', 'message': 'Invalid category'}), 400
-        
+
         db.session.commit()
-        
-        return jsonify({
-            'status': 'success',
-            'message': f'{category.capitalize()} volume updated to {volume}ml',
-            'category': category,
-            'volume': volume
-        })
-        
+        return jsonify({'status': 'success', 'message': f'{category} volume updated to {volume}ml'})
     except (ValueError, TypeError):
-        return jsonify({'status': 'error', 'message': 'Invalid volume value'}), 400
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({'status': 'error', 'message': 'Database error'}), 500
+        return jsonify({'status': 'error', 'message': 'Invalid volume'}), 400
 
-@app.route('/api/settings', methods=['GET'])
-def get_api_settings_new():
-    """Get global settings (volumes, taste amount)"""
-    machine_state = MachineState.get_instance()
-    return jsonify({
-        'classic_target_vol': machine_state.classic_target_vol,
-        'highball_target_vol': machine_state.highball_target_vol,
-        'shot_target_vol': machine_state.shot_target_vol,
-        'taste_amount_ml': machine_state.taste_amount_ml,
-        'is_pouring': machine_state.is_pouring
-    })
-
-# --- Admin GET Endpoints ---
-
-@app.route('/api/admin/pumps', methods=['GET'])
-def admin_api_get_pumps():
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-    
-    pumps = Pump.query.all()
-    # Format for Admin UI
-    pump_list = []
-    for p in pumps:
-        pump_list.append({
-            'id': p.id,
-            'ingredient_name': p.ingredient_name,
-            'pin_number': p.pin_number,
-            'is_alcohol': p.is_alcohol,
-            'is_active': p.is_active,
-            'is_virtual': p.is_virtual,
-            'seconds_per_50ml': p.seconds_per_50ml
-        })
-    return jsonify({'pumps': pump_list})
-
-@app.route('/api/admin/recipes', methods=['GET', 'POST'])
-def admin_api_recipes():
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-
-    if request.method == 'POST':
-        # Create new recipe logic would go here, effectively covered by /save
-        pass
-        
-    recipes = Recipe.query.all()
-    recipe_list = []
-    for r in recipes:
-        recipe_list.append({
-            'id': r.id,
-            'name': r.name,
-            'description': r.description,
-            'category': r.category,
-            'ingredients': r.get_ingredients(), # returns dict
-            'ingredients_json': r.ingredients_json,
-            'points_reward': r.points_reward
-        })
-    return jsonify({'recipes': recipe_list})
-
-@app.route('/api/admin/users', methods=['GET'])
-def admin_api_users():
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-        
-    users = User.query.all()
-    user_list = [{'id': u.id, 'nickname': u.nickname, 'points': u.points, 'is_admin': (u.nickname == 'Admin2001')} for u in users]
-    return jsonify({'users': user_list})
-
-@app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
-def admin_api_delete_user(user_id):
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-        
-    user = User.query.get_or_404(user_id)
-    db.session.delete(user)
-    db.session.commit()
-    return jsonify({'status': 'success'})
-
-@app.route('/api/admin/recipes/<int:recipe_id>', methods=['DELETE'])
-def admin_api_delete_recipe(recipe_id):
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-        
-    recipe = Recipe.query.get_or_404(recipe_id)
-    db.session.delete(recipe)
-    db.session.commit()
-    return jsonify({'status': 'success'})
-
-@app.route('/api/admin/update', methods=['POST'])
-def admin_api_update_entity():
-    """Generic admin update endpoint for Pumps (legacy support)"""
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-        
-    data = request.get_json()
-    entity_type = data.get('entity')
-    entity_id = data.get('id')
-    field = data.get('field')
-    value = data.get('value')
-    
-    try:
-        if entity_type == 'pump':
-            pump = Pump.query.get(int(entity_id))
-            if not pump:
-                return jsonify({'status': 'error', 'message': 'Pump not found'}), 404
-            
-            # Type conversion based on field
-            if field == 'pin_number':
-                value = int(value) if value else None
-            elif field in ['is_active', 'is_alcohol', 'is_virtual']:
-                value = bool(int(value))
-            elif field == 'seconds_per_50ml':
-                value = float(value)
-                
-            if hasattr(pump, field):
-                setattr(pump, field, value)
-                db.session.commit()
-                return jsonify({'status': 'success', 'message': 'Pump updated'})
-            else:
-                return jsonify({'status': 'error', 'message': 'Invalid field'}), 400
-                
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-        
-    return jsonify({'status': 'error', 'message': 'Invalid entity or request'}), 400
-
-@app.route('/api/admin/recipe/save', methods=['POST'])
-def admin_api_save_recipe():
-    """Create or Update Recipe"""
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-        
-    data = request.get_json()
-    recipe_id = data.get('id')
-    name = data.get('name')
-    description = data.get('description')
-    category = data.get('category')
-    ingredients = data.get('ingredients') # Expecting dict {pump_id: ml}
-    
-    if not name or not ingredients:
-         return jsonify({'status': 'error', 'message': 'Name and ingredients required'}), 400
-         
-    try:
-        ingredients_json = json.dumps(ingredients)
-        
-        # Calculate points (1 point per 1 ml alcohol)
-        points_reward = 0
-        for pump_id, ml in ingredients.items():
-            pump = Pump.query.get(int(pump_id))
-            if pump and pump.is_alcohol:
-                points_reward += float(ml)
-        points_reward = round(points_reward)
-        
-        if recipe_id:
-            # Update existing
-            recipe = Recipe.query.get(recipe_id)
-            if not recipe:
-                return jsonify({'status': 'error', 'message': 'Recipe not found'}), 404
-            
-            recipe.name = name
-            recipe.description = description
-            recipe.category = category
-            recipe.ingredients_json = ingredients_json
-            recipe.points_reward = points_reward
-            message = 'Recipe updated'
-        else:
-            # Create new
-            recipe = Recipe(
-                name=name,
-                description=description,
-                category=category,
-                ingredients_json=ingredients_json,
-                points_reward=points_reward
-            )
-            db.session.add(recipe)
-            message = 'Recipe created'
-            
-        db.session.commit()
-        return jsonify({'status': 'success', 'message': message})
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/admin/taste-amount', methods=['GET', 'POST'])
-def admin_api_taste_amount():
-    """Admin API endpoint to get/set taste amount"""
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-    
+@admin_required
+def admin_taste_amount():
     machine_state = MachineState.get_instance()
-    
+
     if request.method == 'GET':
-        return jsonify({
-            'status': 'success',
-            'taste_amount_ml': machine_state.taste_amount_ml
-        })
-    
-    # POST - Update taste amount
+        return jsonify({'status': 'success', 'taste_amount_ml': machine_state.taste_amount_ml})
+
     data = request.get_json()
-    new_amount = data.get('taste_amount_ml')
-    
-    if not new_amount:
+    amount = data.get('taste_amount_ml')
+
+    if not amount:
         return jsonify({'status': 'error', 'message': 'taste_amount_ml required'}), 400
-    
+
     try:
-        new_amount = int(new_amount)
-        
-        # Validate range
-        if new_amount < 10 or new_amount > 100:
-            return jsonify({'status': 'error', 'message': 'Taste amount must be between 10-100ml'}), 400
-        
-        machine_state.taste_amount_ml = new_amount
+        amount = int(amount)
+        if amount < 10 or amount > 100:
+            return jsonify({'status': 'error', 'message': 'Must be 10-100ml'}), 400
+        machine_state.taste_amount_ml = amount
         db.session.commit()
-        
-        return jsonify({
-            'status': 'success',
-            'message': f'Taste amount updated to {new_amount}ml',
-            'taste_amount_ml': new_amount
-        })
-        
+        return jsonify({'status': 'success', 'message': f'Taste amount updated to {amount}ml', 'taste_amount_ml': amount})
     except (ValueError, TypeError):
-        return jsonify({'status': 'error', 'message': 'Invalid taste amount value'}), 400
-    except SQLAlchemyError:
-        db.session.rollback()
-        return jsonify({'status': 'error', 'message': 'Database error'}), 500
-
-@app.route('/admin-dashboard', methods=['GET'])
-def admin_dashboard():
-    # Simple password check for admin access
-    if not check_admin_auth():
-        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 403
-    
-    # Ensure we have all 8 pumps
-    existing_pumps = Pump.query.count()
-    if existing_pumps < 8:
-        for i in range(existing_pumps + 1, 9):
-            new_pump = Pump(id=i, ingredient_name='Empty', is_active=False, seconds_per_50ml=3.0)
-            db.session.add(new_pump)
-        db.session.commit()
-    
-    pumps = Pump.query.order_by(Pump.id).all()
-    recipes = Recipe.query.all()
-    # Filter out Admin2001 explicitly, just in case
-    users = User.query.filter(User.nickname != 'Admin2001').order_by(User.points.desc()).all()
-    
-    return jsonify({
-        'pumps': [p.to_dict() for p in pumps], 
-        'recipes': [r.to_dict() for r in recipes],
-        'users': [u.to_dict() for u in users]
-    })
+        return jsonify({'status': 'error', 'message': 'Invalid value'}), 400
 
 
-@app.route('/profile', methods=['GET', 'POST'])
-@login_required
-def profile():
-    if request.method == 'POST':
-        action = request.form.get('action')
-        
-        if action == 'delete_account':
-            try:
-                # Delete user history first
-                PourHistory.query.filter_by(user_id=current_user.id).delete()
-                
-                # Delete user
-                db.session.delete(current_user)
-                db.session.commit()
-                
-                # Logout and clear session
-                logout_user()
-                response = make_response(jsonify({'status': 'success', 'redirect': url_for('index')}))
-                response.delete_cookie('user_id')
-                
-                return response
-                
-            except Exception as e:
-                db.session.rollback()
-                return jsonify({'status': 'error', 'message': str(e)}), 500
-    
-    return jsonify({'user': current_user.to_dict()})
-
-# Logout functionality removed - users have permanent 12-hour sessions
-# If admin needs to logout, they can clear cookies manually
-
-# Error Handlers
-@app.errorhandler(500)
-def internal_error(error):
-    """Handle internal server errors gracefully"""
-    db.session.rollback()
-    return jsonify({'status': 'error', 'message': 'Internal Server Error'}), 500
+# ==========================================================================
+# ERROR HANDLERS
+# ==========================================================================
 
 @app.errorhandler(404)
 def not_found(error):
-    """Handle 404 errors"""
     return jsonify({'status': 'error', 'message': 'Endpoint not found'}), 404
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return jsonify({'status': 'error', 'message': 'Internal Server Error'}), 500
+
+
+# ==========================================================================
+# STARTUP
+# ==========================================================================
 
 if __name__ == '__main__':
     with app.app_context():
-        # Ensure all tables exist
         db.create_all()
         print("✅ Database tables verified.")
-        
-        # Check for Admin2001
+
+        # Ensure 8 pumps exist
+        if Pump.query.count() == 0:
+            for i in range(1, 9):
+                db.session.add(Pump(id=i, ingredient_name='Empty', is_active=False, seconds_per_50ml=3.0))
+            db.session.add(MachineState(id=1, is_pouring=False))
+            db.session.commit()
+            print("🔧 Default pumps and machine state created.")
+
+        # Ensure Admin2001 exists
         try:
-            admin = User.query.filter_by(nickname='Admin2001').first()
-            if not admin:
-                # Create default admin with a VALID 6-char recovery key
-                # Note: 'Cocktail2026' is too long for the 6-char constraint if checked strictly,
-                # but we use 'ADMIN1' to satisfy the 6-char constraint for the model.
-                # The admin bypass uses the cookie 'COCKTAIL2026', but this is for the DB record.
-                admin = User(nickname='Admin2001', recovery_key='ADMIN1')
-                db.session.add(admin)
+            if not User.query.filter_by(nickname='Admin2001').first():
+                db.session.add(User(nickname='Admin2001', recovery_key='ADMIN1'))
                 db.session.commit()
-                print("👤 Default Admin2001 user created.")
-            else:
-                print("👤 Admin2001 user exists.")
+                print("👤 Admin2001 user created.")
         except Exception as e:
-            print(f"⚠️ Validation check failed (expected on first run if tables didn't exist): {e}")
+            print(f"⚠️ Admin check: {e}")
 
     app.run(debug=True, host='0.0.0.0')

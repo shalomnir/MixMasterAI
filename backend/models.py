@@ -23,6 +23,14 @@ class User(UserMixin, db.Model):
             if not User.query.filter_by(recovery_key=key).first():
                 return key
     
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nickname': self.nickname,
+            'points': self.points,
+            'recovery_key': self.recovery_key,
+        }
+
     def __repr__(self):
         return f'<User {self.nickname}>'
 
@@ -36,6 +44,17 @@ class Pump(db.Model):
     is_virtual = db.Column(db.Boolean, default=False, nullable=False)  # DEPRECATED: No longer affects pour behavior
     seconds_per_50ml = db.Column(db.Float, default=3.0, nullable=False) # Calibration: how many seconds to pour 50ml
     
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'pin_number': self.pin_number,
+            'ingredient_name': self.ingredient_name,
+            'is_active': self.is_active,
+            'is_alcohol': self.is_alcohol,
+            'is_virtual': self.is_virtual,
+            'seconds_per_50ml': self.seconds_per_50ml,
+        }
+
     def __repr__(self):
         return f'<Pump {self.id}: {self.ingredient_name}>'
 
@@ -54,6 +73,18 @@ class Recipe(db.Model):
 
     def set_ingredients(self, ingredients_dict):
         self.ingredients_json = json.dumps(ingredients_dict)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'ingredients_json': self.ingredients_json,
+            'ingredients': self.get_ingredients(),
+            'points_reward': self.points_reward,
+            'image_url': self.image_url,
+            'category': self.category,
+        }
 
 class PourHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
