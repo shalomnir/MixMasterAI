@@ -38,9 +38,27 @@ function AdminDashboard() {
                 api.getSettings()
             ]);
 
-            setPumps(pumpsRes.pumps || []);
-            setRecipes(recipesRes.recipes || []);
-            setUsers(usersRes.users || []);
+            // Normalize pumps - handle both object and array formats
+            const pumpsData = pumpsRes.pumps || {};
+            const pumpsArray = Array.isArray(pumpsData)
+                ? pumpsData
+                : Object.entries(pumpsData).map(([id, p]) => ({ ...p, id: parseInt(id) }));
+            setPumps(pumpsArray);
+
+            // Normalize recipes
+            const recipesData = recipesRes.recipes || {};
+            const recipesArray = Array.isArray(recipesData)
+                ? recipesData
+                : Object.values(recipesData);
+            setRecipes(recipesArray);
+
+            // Normalize users
+            const usersData = usersRes.users || [];
+            const usersArray = Array.isArray(usersData)
+                ? usersData
+                : Object.values(usersData);
+            setUsers(usersArray);
+
             setSettings(settingsRes);
             setIsLoading(false);
         } catch (error) {
@@ -55,7 +73,12 @@ function AdminDashboard() {
             await api.adminUpdate('pump', pumpId, 'is_active', isActive ? 1 : 0);
             showSuccess('Pump updated');
             const res = await api.adminGetPumps();
-            setPumps(res.pumps || []);
+            // Normalize pumps response
+            const pumpsData = res.pumps || {};
+            const pumpsArray = Array.isArray(pumpsData)
+                ? pumpsData
+                : Object.entries(pumpsData).map(([id, p]) => ({ ...p, id: parseInt(id) }));
+            setPumps(pumpsArray);
         } catch (e) {
             showError('Update failed: ' + e.message);
         }

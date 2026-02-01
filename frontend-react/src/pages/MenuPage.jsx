@@ -29,12 +29,21 @@ function MenuPage() {
                 api.getSettings()
             ]);
 
-            // Build pump data map
+            // Build pump data map - handle both object and array formats
             const pumps = {};
             if (pumpsResponse.pumps) {
-                pumpsResponse.pumps.forEach(p => {
-                    pumps[p.id] = p;
-                });
+                const pumpsData = pumpsResponse.pumps;
+                if (Array.isArray(pumpsData)) {
+                    // API returns array
+                    pumpsData.forEach(p => {
+                        pumps[p.id] = p;
+                    });
+                } else {
+                    // API returns object/dictionary keyed by pump ID
+                    Object.entries(pumpsData).forEach(([id, p]) => {
+                        pumps[id] = { ...p, id: parseInt(id) };
+                    });
+                }
             }
             setPumpData(pumps);
 
