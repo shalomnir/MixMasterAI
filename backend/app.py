@@ -980,9 +980,10 @@ def start_new_event():
 @app.route('/api/admin/shutdown', methods=['POST'])
 @admin_required
 def admin_shutdown():
-    """Shutdown the Raspberry Pi."""
+    """Shutdown the Raspberry Pi (works from privileged Docker container)."""
     import platform
     import subprocess
+    import os
     
     # Only allow shutdown on Linux (Raspberry Pi)
     if platform.system() != 'Linux':
@@ -992,9 +993,23 @@ def admin_shutdown():
         }), 400
     
     try:
-        # Use full path for sudo on Pi
-        subprocess.Popen(['/usr/bin/sudo', '/sbin/shutdown', '-h', 'now'])
-        return jsonify({'status': 'success', 'message': 'Shutting down...'})
+        # Use nsenter to run shutdown on the host from privileged container
+        # This requires --privileged flag in docker-compose
+        result = subprocess.run(
+            ['nsenter', '--target', '1', '--mount', '--uts', '--ipc', '--net', '--pid', 
+             '/bin/sh', '-c', 'shutdown -h now'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode == 0:
+            return jsonify({'status': 'success', 'message': 'Shutting down...'})
+        else:
+            # Fallback: try direct poweroff (might work if /sbin is mounted)
+            subprocess.Popen(['/sbin/poweroff'])
+            return jsonify({'status': 'success', 'message': 'Shutting down (fallback)...'})
+            
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Shutdown failed: {str(e)}'}), 500
 
