@@ -151,6 +151,9 @@ function AdminDashboard() {
     const handleSavePump = async (pumpData) => {
         try {
             await api.adminUpdate('pump', pumpData.id, 'ingredient_name', pumpData.ingredient_name);
+            if (pumpData.gpio_pin !== null) {
+                await api.adminUpdate('pump', pumpData.id, 'gpio_pin', pumpData.gpio_pin);
+            }
             await api.adminUpdate('pump', pumpData.id, 'seconds_per_50ml', pumpData.seconds_per_50ml);
             await api.adminUpdate('pump', pumpData.id, 'is_alcohol', pumpData.is_alcohol);
             await api.adminUpdate('pump', pumpData.id, 'is_virtual', pumpData.is_virtual);
@@ -562,6 +565,7 @@ function renderIngredients(ingredients, pumps) {
 
 function PumpModal({ pump, onClose, onSave }) {
     const [ingredientName, setIngredientName] = useState(pump?.ingredient_name || '');
+    const [gpioPin, setGpioPin] = useState(pump?.gpio_pin || '');
     const [secondsPer50ml, setSecondsPer50ml] = useState(pump?.seconds_per_50ml || 5);
     const [isAlcohol, setIsAlcohol] = useState(pump?.is_alcohol || false);
     const [isVirtual, setIsVirtual] = useState(pump?.is_virtual || false);
@@ -573,6 +577,7 @@ function PumpModal({ pump, onClose, onSave }) {
         await onSave({
             id: pump.id,
             ingredient_name: ingredientName,
+            gpio_pin: gpioPin ? parseInt(gpioPin) : null,
             seconds_per_50ml: parseFloat(secondsPer50ml),
             is_alcohol: isAlcohol ? 1 : 0,
             is_virtual: isVirtual ? 1 : 0
@@ -597,15 +602,29 @@ function PumpModal({ pump, onClose, onSave }) {
                                 placeholder="e.g. Vodka"
                             />
                         </div>
-                        <div>
-                            <label className="block text-sm text-slate-400 mb-1">Seconds per 50ml</label>
-                            <input
-                                type="number"
-                                step="0.1"
-                                value={secondsPer50ml}
-                                onChange={(e) => setSecondsPer50ml(e.target.value)}
-                                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white"
-                            />
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm text-slate-400 mb-1">GPIO Pin</label>
+                                <input
+                                    type="number"
+                                    value={gpioPin}
+                                    onChange={(e) => setGpioPin(e.target.value)}
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white"
+                                    placeholder="e.g. 17"
+                                    min="0"
+                                    max="40"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm text-slate-400 mb-1">Seconds per 50ml</label>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    value={secondsPer50ml}
+                                    onChange={(e) => setSecondsPer50ml(e.target.value)}
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white"
+                                />
+                            </div>
                         </div>
                         <div className="flex gap-4">
                             <label className="flex items-center gap-2 cursor-pointer">
