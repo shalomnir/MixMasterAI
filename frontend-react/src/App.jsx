@@ -3,6 +3,7 @@ import { useAuth } from './hooks/useAuth'
 import LoginPage from './pages/LoginPage'
 import MenuPage from './pages/MenuPage'
 import LeaderboardPage from './pages/LeaderboardPage'
+import ProfilePage from './pages/ProfilePage'
 import RecoveryPage from './pages/RecoveryPage'
 import AdminDashboard from './pages/AdminDashboard'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -20,6 +21,11 @@ function App() {
                 <Route path="/menu" element={
                     <ProtectedRoute>
                         <MenuPage />
+                    </ProtectedRoute>
+                } />
+                <Route path="/profile" element={
+                    <ProtectedRoute>
+                        <ProfilePage />
                     </ProtectedRoute>
                 } />
                 <Route path="/leaderboard" element={

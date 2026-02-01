@@ -151,8 +151,8 @@ function AdminDashboard() {
     const handleSavePump = async (pumpData) => {
         try {
             await api.adminUpdate('pump', pumpData.id, 'ingredient_name', pumpData.ingredient_name);
-            if (pumpData.gpio_pin !== null) {
-                await api.adminUpdate('pump', pumpData.id, 'gpio_pin', pumpData.gpio_pin);
+            if (pumpData.pin_number !== null && pumpData.pin_number !== '') {
+                await api.adminUpdate('pump', pumpData.id, 'pin_number', pumpData.pin_number);
             }
             await api.adminUpdate('pump', pumpData.id, 'seconds_per_50ml', pumpData.seconds_per_50ml);
             await api.adminUpdate('pump', pumpData.id, 'is_alcohol', pumpData.is_alcohol);
@@ -565,7 +565,7 @@ function renderIngredients(ingredients, pumps) {
 
 function PumpModal({ pump, onClose, onSave }) {
     const [ingredientName, setIngredientName] = useState(pump?.ingredient_name || '');
-    const [gpioPin, setGpioPin] = useState(pump?.gpio_pin || '');
+    const [pinNumber, setPinNumber] = useState(pump?.pin_number || '');
     const [secondsPer50ml, setSecondsPer50ml] = useState(pump?.seconds_per_50ml || 5);
     const [isAlcohol, setIsAlcohol] = useState(pump?.is_alcohol || false);
     const [isVirtual, setIsVirtual] = useState(pump?.is_virtual || false);
@@ -577,7 +577,7 @@ function PumpModal({ pump, onClose, onSave }) {
         await onSave({
             id: pump.id,
             ingredient_name: ingredientName,
-            gpio_pin: gpioPin ? parseInt(gpioPin) : null,
+            pin_number: pinNumber ? parseInt(pinNumber) : null,
             seconds_per_50ml: parseFloat(secondsPer50ml),
             is_alcohol: isAlcohol ? 1 : 0,
             is_virtual: isVirtual ? 1 : 0
@@ -607,8 +607,8 @@ function PumpModal({ pump, onClose, onSave }) {
                                 <label className="block text-sm text-slate-400 mb-1">GPIO Pin</label>
                                 <input
                                     type="number"
-                                    value={gpioPin}
-                                    onChange={(e) => setGpioPin(e.target.value)}
+                                    value={pinNumber}
+                                    onChange={(e) => setPinNumber(e.target.value)}
                                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white"
                                     placeholder="e.g. 17"
                                     min="0"
