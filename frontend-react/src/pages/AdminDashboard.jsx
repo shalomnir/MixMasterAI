@@ -141,6 +141,63 @@ function AdminDashboard() {
         window.location.href = '/';
     };
 
+    // Helper to normalize pumps after API calls
+    const normalizePumps = (pumpsData) => {
+        return Array.isArray(pumpsData)
+            ? pumpsData
+            : Object.entries(pumpsData).map(([id, p]) => ({ ...p, id: parseInt(id) }));
+    };
+
+    const handleSavePump = async (pumpData) => {
+        try {
+            await api.adminUpdate('pump', pumpData.id, 'ingredient_name', pumpData.ingredient_name);
+            await api.adminUpdate('pump', pumpData.id, 'seconds_per_50ml', pumpData.seconds_per_50ml);
+            await api.adminUpdate('pump', pumpData.id, 'is_alcohol', pumpData.is_alcohol);
+            await api.adminUpdate('pump', pumpData.id, 'is_virtual', pumpData.is_virtual);
+            showSuccess('Pump saved');
+            const res = await api.adminGetPumps();
+            setPumps(normalizePumps(res.pumps || {}));
+            setSelectedPump(null);
+        } catch (e) {
+            showError('Save failed: ' + e.message);
+        }
+    };
+
+    const handleSaveRecipe = async (recipeData) => {
+        try {
+            if (recipeData.id) {
+                // Update existing recipe
+                await api.adminUpdate('recipe', recipeData.id, 'name', recipeData.name);
+                await api.adminUpdate('recipe', recipeData.id, 'description', recipeData.description);
+                await api.adminUpdate('recipe', recipeData.id, 'category', recipeData.category);
+                await api.adminUpdate('recipe', recipeData.id, 'ingredients_json', recipeData.ingredients_json);
+            } else {
+                // Create new recipe
+                await api.adminCreateRecipe(recipeData);
+            }
+            showSuccess('Recipe saved');
+            const res = await api.adminGetRecipes();
+            const recipesData = res.recipes || {};
+            setRecipes(Array.isArray(recipesData) ? recipesData : Object.values(recipesData));
+            setSelectedRecipe(null);
+        } catch (e) {
+            showError('Save failed: ' + e.message);
+        }
+    };
+
+    const handleDeleteRecipe = async (recipeId) => {
+        try {
+            await api.adminDeleteRecipe(recipeId);
+            showSuccess('Recipe deleted');
+            const res = await api.adminGetRecipes();
+            const recipesData = res.recipes || {};
+            setRecipes(Array.isArray(recipesData) ? recipesData : Object.values(recipesData));
+            setSelectedRecipe(null);
+        } catch (e) {
+            showError('Delete failed: ' + e.message);
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center">
@@ -457,6 +514,26 @@ function AdminDashboard() {
                     </div>
                 </section>
             </main>
+
+            {/* Pump Edit Modal */}
+            {selectedPump && (
+                <PumpModal
+                    pump={selectedPump}
+                    onClose={() => setSelectedPump(null)}
+                    onSave={handleSavePump}
+                />
+            )}
+
+            {/* Recipe Edit Modal */}
+            {selectedRecipe && (
+                <RecipeModal
+                    recipe={selectedRecipe}
+                    pumps={pumps}
+                    onClose={() => setSelectedRecipe(null)}
+                    onSave={handleSaveRecipe}
+                    onDelete={handleDeleteRecipe}
+                />
+            )}
         </div>
     );
 }
@@ -481,6 +558,231 @@ function renderIngredients(ingredients, pumps) {
             </span>
         );
     });
+}
+
+function PumpModal({ pump, onClose, onSave }) {
+    const [ingredientName, setIngredientName] = useState(pump?.ingredient_name || '');
+    const [secondsPer50ml, setSecondsPer50ml] = useState(pump?.seconds_per_50ml || 5);
+    const [isAlcohol, setIsAlcohol] = useState(pump?.is_alcohol || false);
+    const [isVirtual, setIsVirtual] = useState(pump?.is_virtual || false);
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsSaving(true);
+        await onSave({
+            id: pump.id,
+            ingredient_name: ingredientName,
+            seconds_per_50ml: parseFloat(secondsPer50ml),
+            is_alcohol: isAlcohol ? 1 : 0,
+            is_virtual: isVirtual ? 1 : 0
+        });
+        setIsSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[200]">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose}></div>
+            <div className="absolute inset-0 flex items-center justify-center p-4">
+                <div className="bg-slate-900 rounded-2xl border border-slate-700 p-6 w-full max-w-md">
+                    <h2 className="text-xl font-bold text-white mb-4">Edit Pump #{pump.id}</h2>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="block text-sm text-slate-400 mb-1">Ingredient Name</label>
+                            <input
+                                type="text"
+                                value={ingredientName}
+                                onChange={(e) => setIngredientName(e.target.value)}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white"
+                                placeholder="e.g. Vodka"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm text-slate-400 mb-1">Seconds per 50ml</label>
+                            <input
+                                type="number"
+                                step="0.1"
+                                value={secondsPer50ml}
+                                onChange={(e) => setSecondsPer50ml(e.target.value)}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white"
+                            />
+                        </div>
+                        <div className="flex gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={isAlcohol}
+                                    onChange={(e) => setIsAlcohol(e.target.checked)}
+                                    className="w-5 h-5 rounded"
+                                />
+                                <span className="text-white">Is Alcohol</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={isVirtual}
+                                    onChange={(e) => setIsVirtual(e.target.checked)}
+                                    className="w-5 h-5 rounded"
+                                />
+                                <span className="text-white">Virtual Pump</span>
+                            </label>
+                        </div>
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isSaving}
+                                className="flex-1 py-2 bg-pink-600 hover:bg-pink-500 rounded-lg text-white font-bold"
+                            >
+                                {isSaving ? 'Saving...' : 'Save'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function RecipeModal({ recipe, pumps, onClose, onSave, onDelete }) {
+    const isNew = !recipe.id;
+    const [name, setName] = useState(recipe?.name || '');
+    const [description, setDescription] = useState(recipe?.description || '');
+    const [category, setCategory] = useState(recipe?.category || 'classic');
+    const [ingredients, setIngredients] = useState(() => {
+        let ing = recipe?.ingredients || recipe?.ingredients_json || {};
+        if (typeof ing === 'string') {
+            try { ing = JSON.parse(ing); } catch (e) { ing = {}; }
+        }
+        return ing;
+    });
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleIngredientChange = (pumpId, amount) => {
+        if (amount === '' || parseFloat(amount) <= 0) {
+            const newIng = { ...ingredients };
+            delete newIng[pumpId];
+            setIngredients(newIng);
+        } else {
+            setIngredients({ ...ingredients, [pumpId]: parseFloat(amount) });
+        }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsSaving(true);
+        await onSave({
+            id: recipe.id,
+            name,
+            description,
+            category,
+            ingredients_json: JSON.stringify(ingredients)
+        });
+        setIsSaving(false);
+    };
+
+    const handleDelete = async () => {
+        if (confirm(`Delete recipe "${name}"? This cannot be undone.`)) {
+            await onDelete(recipe.id);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[200]">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose}></div>
+            <div className="absolute inset-0 flex items-center justify-center p-4 overflow-y-auto">
+                <div className="bg-slate-900 rounded-2xl border border-slate-700 p-6 w-full max-w-lg my-8">
+                    <h2 className="text-xl font-bold text-white mb-4">
+                        {isNew ? 'Create Recipe' : `Edit: ${recipe.name}`}
+                    </h2>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="block text-sm text-slate-400 mb-1">Name</label>
+                            <input
+                                type="text"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm text-slate-400 mb-1">Description</label>
+                            <textarea
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white"
+                                rows={2}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm text-slate-400 mb-1">Category</label>
+                            <select
+                                value={category}
+                                onChange={(e) => setCategory(e.target.value)}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white"
+                            >
+                                <option value="classic">Classic</option>
+                                <option value="highball">Highball</option>
+                                <option value="shot">Shot</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm text-slate-400 mb-2">Ingredients (ml per pump)</label>
+                            <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                                {pumps.map(pump => (
+                                    <div key={pump.id} className="flex items-center gap-2">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={ingredients[pump.id] || ''}
+                                            onChange={(e) => handleIngredientChange(pump.id, e.target.value)}
+                                            className="w-16 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                                            placeholder="ml"
+                                        />
+                                        <span className="text-slate-300 text-sm truncate">
+                                            {pump.ingredient_name || `#${pump.id}`}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="flex gap-3 pt-4">
+                            {!isNew && (
+                                <button
+                                    type="button"
+                                    onClick={handleDelete}
+                                    className="py-2 px-4 bg-red-600 hover:bg-red-500 rounded-lg text-white font-medium"
+                                >
+                                    Delete
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isSaving}
+                                className="flex-1 py-2 bg-pink-600 hover:bg-pink-500 rounded-lg text-white font-bold"
+                            >
+                                {isSaving ? 'Saving...' : 'Save'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 export default AdminDashboard;
