@@ -981,11 +981,20 @@ def start_new_event():
 @admin_required
 def admin_shutdown():
     """Shutdown the Raspberry Pi."""
+    import platform
+    import subprocess
+    
+    # Only allow shutdown on Linux (Raspberry Pi)
+    if platform.system() != 'Linux':
+        return jsonify({
+            'status': 'error', 
+            'message': f'Shutdown not supported on {platform.system()}. Only available on Raspberry Pi.'
+        }), 400
+    
     try:
-        import subprocess
-        # Schedule shutdown in 3 seconds to allow response to be sent
-        subprocess.Popen(['sudo', 'shutdown', '-h', 'now'])
-        return jsonify({'status': 'success', 'message': 'Shutting down in 3 seconds...'})
+        # Use full path for sudo on Pi
+        subprocess.Popen(['/usr/bin/sudo', '/sbin/shutdown', '-h', 'now'])
+        return jsonify({'status': 'success', 'message': 'Shutting down...'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Shutdown failed: {str(e)}'}), 500
 
