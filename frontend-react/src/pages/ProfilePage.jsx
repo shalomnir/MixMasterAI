@@ -36,10 +36,10 @@ function ProfilePage() {
     const handleShare = async () => {
         const shareText = `🍹 My MixMasterAI Stats${eventName ? ` @ ${eventName}` : ''}
 
-👤 ${user?.nickname || 'Guest'}
-🏆 ${stats?.total_points || 0} points
-🍸 ${stats?.total_cocktails || 0} cocktails
-💧 ${stats?.total_alcohol_ml || 0}ml poured
+👤 ${stats?.nickname || user?.nickname || 'Guest'}
+🏆 ${stats?.points || 0} points
+🍸 ${stats?.total_pours || 0} cocktails
+💧 ${Math.round(stats?.total_alcohol_ml || 0)}ml poured
 
 #MixMasterAI`;
 
@@ -103,7 +103,7 @@ function ProfilePage() {
                                 <span className="text-slate-300">Total Points</span>
                             </div>
                             <span className="text-2xl font-bold text-yellow-400">
-                                {stats?.total_points || 0}
+                                {stats?.points || 0}
                             </span>
                         </div>
 
@@ -117,7 +117,7 @@ function ProfilePage() {
                                 <span className="text-slate-300">Cocktails</span>
                             </div>
                             <span className="text-2xl font-bold text-pink-400">
-                                {stats?.total_cocktails || 0}
+                                {stats?.total_pours || 0}
                             </span>
                         </div>
 
@@ -136,7 +136,7 @@ function ProfilePage() {
                         </div>
 
                         {/* Rank if available */}
-                        {stats?.rank && (
+                        {stats?.current_rank > 0 && (
                             <>
                                 <div className="border-t border-white/10"></div>
                                 <div className="flex items-center justify-between">
@@ -145,7 +145,7 @@ function ProfilePage() {
                                         <span className="text-slate-300">Current Rank</span>
                                     </div>
                                     <span className="text-2xl font-bold text-emerald-400">
-                                        #{stats.rank}
+                                        #{stats.current_rank}
                                     </span>
                                 </div>
                             </>

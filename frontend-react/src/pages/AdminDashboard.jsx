@@ -231,6 +231,22 @@ function AdminDashboard() {
                             <p className="text-sm font-bold text-slate-200">{user?.nickname || 'Admin'}</p>
                         </div>
                         <button
+                            onClick={async () => {
+                                if (confirm('⚠️ Shutdown the Raspberry Pi?\n\nThe machine will power off and you will need physical access to restart it.')) {
+                                    try {
+                                        await api.adminShutdown();
+                                        showSuccess('Shutting down...');
+                                    } catch (e) {
+                                        showError('Shutdown failed: ' + e.message);
+                                    }
+                                }
+                            }}
+                            className="text-xs text-orange-400 hover:text-orange-300 font-bold border border-orange-900/30 
+                        bg-orange-900/10 px-3 py-1.5 rounded-lg transition"
+                        >
+                            ⏻ Shutdown
+                        </button>
+                        <button
                             onClick={handleLogout}
                             className="text-xs text-red-400 hover:text-red-300 font-bold border border-red-900/30 
                         bg-red-900/10 px-3 py-1.5 rounded-lg transition"
@@ -571,6 +587,15 @@ function PumpModal({ pump, onClose, onSave }) {
     const [isVirtual, setIsVirtual] = useState(pump?.is_virtual || false);
     const [isSaving, setIsSaving] = useState(false);
 
+    // Pump test state
+    const [pumpState, setPumpState] = useState('off'); // 'on', 'off', 'running'
+    const [testMessage, setTestMessage] = useState('');
+
+    // Calibration state
+    const [isCalibrating, setIsCalibrating] = useState(false);
+    const [calibrationMl, setCalibrationMl] = useState('');
+    const CALIBRATION_DURATION = 5; // Run for 5 seconds
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsSaving(true);
@@ -585,11 +610,66 @@ function PumpModal({ pump, onClose, onSave }) {
         setIsSaving(false);
     };
 
+    const handleTestPump = async (action) => {
+        if (!pinNumber) {
+            setTestMessage('⚠️ Set GPIO pin first');
+            return;
+        }
+        try {
+            const res = await api.adminTestPump(pump.id, action);
+            setPumpState(res.state || (action === 'on' ? 'on' : 'off'));
+            setTestMessage(res.message);
+        } catch (e) {
+            setTestMessage('❌ ' + e.message);
+        }
+    };
+
+    const handleCalibrate = async () => {
+        if (!pinNumber) {
+            setTestMessage('⚠️ Set GPIO pin first');
+            return;
+        }
+        setIsCalibrating(true);
+        setTestMessage(`Running pump for ${CALIBRATION_DURATION}s...`);
+        setPumpState('running');
+
+        try {
+            await api.adminTestPump(pump.id, 'timed', CALIBRATION_DURATION);
+            // Wait for pump to finish
+            await new Promise(resolve => setTimeout(resolve, (CALIBRATION_DURATION + 0.5) * 1000));
+            setPumpState('off');
+            setTestMessage('Pump stopped. Enter the ml amount that came out below:');
+        } catch (e) {
+            setTestMessage('❌ ' + e.message);
+            setPumpState('off');
+        }
+        setIsCalibrating(false);
+    };
+
+    const handleSaveCalibration = async () => {
+        if (!calibrationMl || parseFloat(calibrationMl) <= 0) {
+            setTestMessage('⚠️ Enter a valid ml amount');
+            return;
+        }
+        try {
+            const res = await api.adminCalibratePump(pump.id, CALIBRATION_DURATION, parseFloat(calibrationMl));
+            if (res.applied) {
+                setSecondsPer50ml(res.seconds_per_50ml);
+                setTestMessage(`✅ ${res.message}`);
+            } else {
+                setTestMessage(`⚠️ ${res.message}`);
+            }
+            setCalibrationMl('');
+        } catch (e) {
+            setTestMessage('❌ ' + e.message);
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-[200]">
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose}></div>
-            <div className="absolute inset-0 flex items-center justify-center p-4">
-                <div className="bg-slate-900 rounded-2xl border border-slate-700 p-6 w-full max-w-md">
+            <div className="absolute inset-0 flex items-center justify-center p-4 overflow-y-auto">
+                <div className="bg-slate-900 rounded-2xl border border-slate-700 p-6 w-full max-w-md my-4">
                     <h2 className="text-xl font-bold text-white mb-4">Edit Pump #{pump.id}</h2>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
@@ -646,7 +726,75 @@ function PumpModal({ pump, onClose, onSave }) {
                                 <span className="text-white">Virtual Pump</span>
                             </label>
                         </div>
-                        <div className="flex gap-3 pt-4">
+
+                        {/* Pump Test Section */}
+                        <div className="border-t border-slate-700 pt-4 mt-4">
+                            <label className="block text-sm text-slate-400 mb-2">🔧 Pump Test</label>
+                            <div className="flex gap-2 mb-2">
+                                <button
+                                    type="button"
+                                    onClick={() => handleTestPump('on')}
+                                    disabled={pumpState === 'running'}
+                                    className={`flex-1 py-2 rounded-lg font-medium transition ${pumpState === 'on'
+                                            ? 'bg-green-600 text-white'
+                                            : 'bg-green-900/30 text-green-400 hover:bg-green-900/50'
+                                        }`}
+                                >
+                                    ▶ ON
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleTestPump('off')}
+                                    disabled={pumpState === 'running'}
+                                    className={`flex-1 py-2 rounded-lg font-medium transition ${pumpState === 'off'
+                                            ? 'bg-red-600 text-white'
+                                            : 'bg-red-900/30 text-red-400 hover:bg-red-900/50'
+                                        }`}
+                                >
+                                    ⏹ OFF
+                                </button>
+                            </div>
+                            {testMessage && (
+                                <p className="text-xs text-slate-400 text-center">{testMessage}</p>
+                            )}
+                        </div>
+
+                        {/* Calibration Section */}
+                        <div className="border-t border-slate-700 pt-4">
+                            <label className="block text-sm text-slate-400 mb-2">📏 Calibration</label>
+                            <div className="space-y-2">
+                                <button
+                                    type="button"
+                                    onClick={handleCalibrate}
+                                    disabled={isCalibrating || pumpState === 'on'}
+                                    className="w-full py-2 bg-cyan-900/30 text-cyan-400 hover:bg-cyan-900/50 
+                                              rounded-lg font-medium transition disabled:opacity-50"
+                                >
+                                    {isCalibrating ? `Running ${CALIBRATION_DURATION}s...` : `🧪 Run for ${CALIBRATION_DURATION} seconds`}
+                                </button>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        value={calibrationMl}
+                                        onChange={(e) => setCalibrationMl(e.target.value)}
+                                        className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm"
+                                        placeholder="ml that came out"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveCalibration}
+                                        disabled={!calibrationMl}
+                                        className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-white font-medium 
+                                                  disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Calculate
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 pt-4 border-t border-slate-700">
                             <button
                                 type="button"
                                 onClick={onClose}

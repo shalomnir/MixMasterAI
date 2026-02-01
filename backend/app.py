@@ -977,6 +977,130 @@ def start_new_event():
         return jsonify({'status': 'error', 'message': f'Failed to start event: {str(e)}'}), 500
 
 
+@app.route('/api/admin/shutdown', methods=['POST'])
+@admin_required
+def admin_shutdown():
+    """Shutdown the Raspberry Pi."""
+    try:
+        import subprocess
+        # Schedule shutdown in 3 seconds to allow response to be sent
+        subprocess.Popen(['sudo', 'shutdown', '-h', 'now'])
+        return jsonify({'status': 'success', 'message': 'Shutting down in 3 seconds...'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Shutdown failed: {str(e)}'}), 500
+
+
+@app.route('/api/admin/pump/<int:pump_id>/test', methods=['POST'])
+@admin_required
+def admin_test_pump(pump_id):
+    """Test a pump by turning it on/off."""
+    data = request.get_json() or {}
+    action = data.get('action', 'toggle')  # 'on', 'off', or 'toggle'
+    duration = data.get('duration', 5)  # Default 5 seconds for timed test
+    
+    pump = Pump.query.get(pump_id)
+    if not pump:
+        return jsonify({'status': 'error', 'message': 'Pump not found'}), 404
+    
+    pin_number = pump.pin_number
+    if not pin_number:
+        return jsonify({'status': 'error', 'message': 'Pump has no GPIO pin assigned'}), 400
+    
+    try:
+        if action == 'on':
+            if GPIO_AVAILABLE:
+                GPIO.setup(pin_number, GPIO.OUT)
+                GPIO.output(pin_number, GPIO.HIGH)
+            return jsonify({'status': 'success', 'message': f'Pump {pump_id} turned ON', 'state': 'on'})
+        
+        elif action == 'off':
+            if GPIO_AVAILABLE:
+                GPIO.setup(pin_number, GPIO.OUT)
+                GPIO.output(pin_number, GPIO.LOW)
+            return jsonify({'status': 'success', 'message': f'Pump {pump_id} turned OFF', 'state': 'off'})
+        
+        elif action == 'timed':
+            # Run pump for specified duration (for calibration)
+            duration = min(max(float(duration), 1), 30)  # Clamp between 1-30 seconds
+            
+            def run_timed():
+                if GPIO_AVAILABLE:
+                    GPIO.setup(pin_number, GPIO.OUT)
+                    GPIO.output(pin_number, GPIO.HIGH)
+                    time.sleep(duration)
+                    GPIO.output(pin_number, GPIO.LOW)
+                else:
+                    print(f"[SIM] Pump {pump_id} running for {duration}s")
+                    time.sleep(duration)
+                    print(f"[SIM] Pump {pump_id} stopped")
+            
+            thread = threading.Thread(target=run_timed)
+            thread.start()
+            return jsonify({
+                'status': 'success', 
+                'message': f'Pump {pump_id} running for {duration}s',
+                'duration': duration
+            })
+        
+        else:
+            return jsonify({'status': 'error', 'message': 'Invalid action. Use on, off, or timed'}), 400
+            
+    except Exception as e:
+        # Safety: turn off pump on error
+        if GPIO_AVAILABLE and pin_number:
+            try:
+                GPIO.output(pin_number, GPIO.LOW)
+            except:
+                pass
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/admin/pump/<int:pump_id>/calibrate', methods=['POST'])
+@admin_required
+def admin_calibrate_pump(pump_id):
+    """Calculate seconds_per_50ml based on measured output."""
+    data = request.get_json() or {}
+    duration = data.get('duration', 5)  # How long the pump ran
+    ml_measured = data.get('ml_measured')  # How many ml came out
+    
+    if not ml_measured or float(ml_measured) <= 0:
+        return jsonify({'status': 'error', 'message': 'ml_measured is required and must be > 0'}), 400
+    
+    pump = Pump.query.get(pump_id)
+    if not pump:
+        return jsonify({'status': 'error', 'message': 'Pump not found'}), 404
+    
+    try:
+        duration = float(duration)
+        ml_measured = float(ml_measured)
+        
+        # Calculate: if pump ran for X seconds and produced Y ml,
+        # then seconds_per_50ml = (X / Y) * 50
+        seconds_per_50ml = (duration / ml_measured) * 50
+        seconds_per_50ml = round(seconds_per_50ml, 2)
+        
+        # Sanity check (0.5 to 30 seconds per 50ml is reasonable)
+        if seconds_per_50ml < 0.5 or seconds_per_50ml > 30:
+            return jsonify({
+                'status': 'warning',
+                'message': f'Calculated value {seconds_per_50ml}s seems unusual. Please verify your measurement.',
+                'seconds_per_50ml': seconds_per_50ml,
+                'applied': False
+            })
+        
+        pump.seconds_per_50ml = seconds_per_50ml
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Calibration saved: {seconds_per_50ml}s per 50ml',
+            'seconds_per_50ml': seconds_per_50ml,
+            'applied': True
+        })
+    except (ValueError, TypeError) as e:
+        return jsonify({'status': 'error', 'message': f'Invalid values: {str(e)}'}), 400
+
+
 # ==========================================================================
 # ERROR HANDLERS
 # ==========================================================================

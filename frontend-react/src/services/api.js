@@ -315,6 +315,18 @@ class CocktailAPI {
     async adminStartEvent(eventName) {
         return this.post('/api/admin/start-event', { event_name: eventName });
     }
+
+    async adminShutdown() {
+        return this.post('/api/admin/shutdown', {});
+    }
+
+    async adminTestPump(pumpId, action, duration = 5) {
+        return this.post(`/api/admin/pump/${pumpId}/test`, { action, duration });
+    }
+
+    async adminCalibratePump(pumpId, duration, mlMeasured) {
+        return this.post(`/api/admin/pump/${pumpId}/calibrate`, { duration, ml_measured: mlMeasured });
+    }
 }
 
 // Create singleton instance
