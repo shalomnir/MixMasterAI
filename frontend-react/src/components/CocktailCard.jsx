@@ -1,8 +1,17 @@
+import { useState } from 'react';
+
+const PLACEHOLDER_IMG = '/assets/cocktails-imgs/placeholder.png';
+
 function CocktailCard({ recipe, color = 'pink', onClick }) {
-    const gradientColors = {
-        'pink': 'from-pink-500 to-violet-500',
-        'cyan': 'from-cyan-500 to-blue-500',
-        'amber': 'from-amber-500 to-orange-500'
+    const [imgSrc, setImgSrc] = useState(() => {
+        const filename = recipe.image_url;
+        return filename
+            ? `/assets/cocktails-imgs/${filename}`
+            : PLACEHOLDER_IMG;
+    });
+
+    const handleImageError = () => {
+        setImgSrc(PLACEHOLDER_IMG);
     };
 
     return (
@@ -13,9 +22,14 @@ function CocktailCard({ recipe, color = 'pink', onClick }) {
                  border border-white/5 flex flex-col items-center justify-center p-4 gap-2
                  touch-manipulation"
         >
-            <div className={`flex-shrink-0 w-14 h-14 rounded-full bg-gradient-to-br ${gradientColors[color]} 
-                       flex items-center justify-center text-2xl shadow-lg`}>
-                🍹
+            <div className="flex-shrink-0 w-14 h-14 rounded-full overflow-hidden shadow-lg">
+                <img
+                    src={imgSrc}
+                    alt={recipe.name}
+                    loading="lazy"
+                    onError={handleImageError}
+                    className="w-full h-full object-cover"
+                />
             </div>
             <div className="w-full flex flex-col items-center">
                 <h3 className="text-lg font-extrabold text-white text-center line-clamp-1 leading-tight mb-1">
