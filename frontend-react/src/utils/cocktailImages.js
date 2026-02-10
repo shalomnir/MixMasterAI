@@ -30,6 +30,9 @@ const IMAGE_MAP = {
     'Vodka Shot': 'shots.webp',
     'Tequila Shot': 'shots.webp',
     'White Rum Shot': 'shots.webp',
+    'Gin Shot': 'shots.webp',
+    'Rum Cran Soda': 'Gin-Cran-Soda.webp',
+    'Tequila Cran Soda': 'Gin-Cran-Soda.webp',
 };
 
 export function resolveImage(recipe) {

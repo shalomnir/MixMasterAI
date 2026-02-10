@@ -38,13 +38,10 @@ function LoginPage() {
 
         try {
             if (isAdminBypass) {
-                // Admin bypass - no password required
                 loginAsAdmin();
                 navigate('/admin');
                 return;
             }
-
-            // Regular user registration
             await register(nickname.trim());
             navigate('/menu');
         } catch (err) {
@@ -58,23 +55,24 @@ function LoginPage() {
     };
 
     return (
-        <div className="bg-slate-900 text-white min-h-[100dvh] flex flex-col overflow-hidden">
+        <div className="bg-black text-white min-h-[100dvh] flex flex-col overflow-hidden">
             {/* Brand Header */}
-            <header className="px-4 pt-4 text-center pb-2">
-                <h1 className="text-2xl font-bold gradient-text-pink">
+            <header className="px-4 pt-6 text-center pb-2">
+                <h1 className="text-2xl font-bold gradient-text-cyan">
                     MixMasterAI
                 </h1>
             </header>
 
             <div className="flex-1 overflow-hidden flex items-center justify-center p-4"
                 style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
-                <div className="glass rounded-3xl p-10 md:p-14 max-w-lg w-full border border-white/10 shadow-2xl">
+                <div className="bg-white/[0.03] backdrop-blur-md rounded-3xl p-10 md:p-14 max-w-lg w-full 
+                     border border-[#00E5FF]/15 shadow-2xl shadow-[#00E5FF]/5">
                     <div className="text-center space-y-8">
                         <div className="space-y-3">
-                            <h1 className="text-5xl md:text-6xl font-extrabold gradient-text-pink">
+                            <h1 className="text-5xl md:text-6xl font-extrabold gradient-text-cyan">
                                 Pour It Up.
                             </h1>
-                            <p className="text-slate-400 text-base md:text-lg">
+                            <p className="text-gray-500 text-base md:text-lg">
                                 {eventName ? `Welcome to ${eventName}` : 'The AI-powered cocktail experience.'}
                             </p>
                         </div>
@@ -89,7 +87,7 @@ function LoginPage() {
                         {/* Registration Form */}
                         <form onSubmit={handleSubmit} className="space-y-5">
                             <div>
-                                <label htmlFor="nickname" className="block text-base text-slate-400 mb-3">
+                                <label htmlFor="nickname" className="block text-base text-gray-500 mb-3">
                                     Who are you?
                                 </label>
                                 <input
@@ -100,9 +98,9 @@ function LoginPage() {
                                     required
                                     autoFocus
                                     placeholder="Enter your nickname"
-                                    className="w-full px-5 py-4 text-lg rounded-xl bg-slate-800 border border-slate-700 
-                            text-white placeholder-slate-500 focus:outline-none focus:ring-2 
-                            focus:ring-pink-500 focus:border-transparent transition"
+                                    className="w-full px-5 py-4 text-lg rounded-xl bg-white/5 border border-white/10 
+                                        text-white placeholder-gray-600 focus:outline-none focus:ring-2 
+                                        focus:ring-[#00E5FF]/50 focus:border-[#00E5FF]/30 transition"
                                 />
                             </div>
 
@@ -110,21 +108,21 @@ function LoginPage() {
                                 type="submit"
                                 disabled={isLoading}
                                 className={`w-full py-5 text-xl rounded-xl font-bold shadow-lg 
-                          hover:scale-[1.02] transition transform active:scale-95
-                          ${isAdminBypass
-                                        ? 'bg-gradient-to-r from-pink-500 to-orange-500'
-                                        : 'bg-gradient-to-r from-pink-600 to-violet-600'}`}
+                                  hover:scale-[1.02] transition transform active:scale-95
+                                  ${isAdminBypass
+                                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 shadow-amber-500/30'
+                                        : 'bg-gradient-to-r from-cyan-500 to-[#00E5FF] text-black shadow-[#00E5FF]/30'}`}
                             >
                                 {isLoading ? 'Please wait...' : (isAdminBypass ? 'Go to Dashboard' : 'Start Mixing')}
                             </button>
                         </form>
 
                         {/* Recovery Link */}
-                        <div className="pt-4 border-t border-slate-700">
-                            <p className="text-slate-500 text-sm md:text-base mb-3">Lost your session?</p>
+                        <div className="pt-4 border-t border-white/5">
+                            <p className="text-gray-600 text-sm md:text-base mb-3">Lost your session?</p>
                             <a
                                 href="/recovery"
-                                className="text-pink-400 hover:text-pink-300 text-base font-semibold transition-colors"
+                                className="text-[#00E5FF]/70 hover:text-[#00E5FF] text-base font-semibold transition-colors"
                             >
                                 → Recover Account with Key
                             </a>

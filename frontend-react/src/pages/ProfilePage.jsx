@@ -21,7 +21,6 @@ function ProfilePage() {
                 setStats(statsRes);
             }
 
-            // Get event name
             const settings = await api.getSettings();
             if (settings.current_event_name) {
                 setEventName(settings.current_event_name);
@@ -50,11 +49,9 @@ function ProfilePage() {
                     text: shareText
                 });
             } catch (e) {
-                // User cancelled or error
                 console.log('Share cancelled');
             }
         } else {
-            // Fallback: copy to clipboard
             navigator.clipboard.writeText(shareText);
             alert('Stats copied to clipboard!');
         }
@@ -62,7 +59,7 @@ function ProfilePage() {
 
     if (isLoading) {
         return (
-            <div className="bg-slate-900 text-white min-h-[100dvh] flex flex-col">
+            <div className="bg-black text-white min-h-[100dvh] flex flex-col">
                 <div className="flex-1 flex items-center justify-center">
                     <div className="spinner"></div>
                 </div>
@@ -72,13 +69,11 @@ function ProfilePage() {
     }
 
     return (
-        <div className="bg-slate-900 text-white min-h-[100dvh] flex flex-col">
+        <div className="bg-black text-white min-h-[100dvh] flex flex-col">
             {/* Header */}
-            <header className="px-4 pt-4 text-center">
-                <h1 className="text-xl font-bold gradient-text-pink">MixMasterAI</h1>
-                {eventName && (
-                    <p className="text-cyan-400 text-sm mt-1">{eventName}</p>
-                )}
+            <header className="px-4 pt-3 text-center pb-1">
+                <h1 className="text-xl font-bold gradient-text-cyan">MixMasterAI</h1>
+                {eventName && <p className="text-sm text-gray-500 mt-0.5">{eventName}</p>}
             </header>
 
             {/* Profile Card */}
@@ -86,65 +81,63 @@ function ProfilePage() {
                 <div className="w-full max-w-sm">
                     {/* User Avatar & Name */}
                     <div className="text-center mb-6">
-                        <div className="w-24 h-24 mx-auto rounded-full bg-gradient-to-br from-pink-500 to-violet-600 
-                                       flex items-center justify-center text-5xl shadow-lg shadow-pink-500/30 mb-4">
+                        <div className="w-24 h-24 mx-auto rounded-full bg-gradient-to-br from-cyan-500 to-[#00E5FF] 
+                                       flex items-center justify-center text-5xl shadow-lg shadow-[#00E5FF]/30 mb-4">
                             👤
                         </div>
                         <h2 className="text-2xl font-bold text-white">{user?.nickname || 'Guest'}</h2>
-                        <p className="text-slate-400 text-sm">Party Guest</p>
+                        <p className="text-gray-500 text-sm">Party Guest</p>
                     </div>
 
                     {/* Stats Card */}
-                    <div className="glass rounded-2xl p-6 space-y-4">
+                    <div className="bg-white/[0.03] border border-[#00E5FF]/10 rounded-3xl p-6 space-y-4">
                         {/* Points */}
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <span className="text-2xl">🏆</span>
-                                <span className="text-slate-300">Total Points</span>
+                                <span className="text-gray-400">Total Points</span>
                             </div>
-                            <span className="text-2xl font-bold text-yellow-400">
+                            <span className="text-2xl font-bold text-[#00E5FF]">
                                 {stats?.points || 0}
                             </span>
                         </div>
 
-                        {/* Divider */}
-                        <div className="border-t border-white/10"></div>
+                        <div className="border-t border-white/5"></div>
 
                         {/* Cocktails */}
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <span className="text-2xl">🍸</span>
-                                <span className="text-slate-300">Cocktails</span>
+                                <span className="text-gray-400">Cocktails</span>
                             </div>
-                            <span className="text-2xl font-bold text-pink-400">
+                            <span className="text-2xl font-bold text-[#00E5FF]">
                                 {stats?.total_pours || 0}
                             </span>
                         </div>
 
-                        {/* Divider */}
-                        <div className="border-t border-white/10"></div>
+                        <div className="border-t border-white/5"></div>
 
                         {/* Volume */}
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <span className="text-2xl">💧</span>
-                                <span className="text-slate-300">Alcohol Poured</span>
+                                <span className="text-gray-400">Alcohol Poured</span>
                             </div>
-                            <span className="text-2xl font-bold text-cyan-400">
+                            <span className="text-2xl font-bold text-[#00E5FF]">
                                 {stats?.total_alcohol_ml || 0}ml
                             </span>
                         </div>
 
-                        {/* Rank if available */}
+                        {/* Rank */}
                         {stats?.current_rank > 0 && (
                             <>
-                                <div className="border-t border-white/10"></div>
+                                <div className="border-t border-white/5"></div>
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <span className="text-2xl">📊</span>
-                                        <span className="text-slate-300">Current Rank</span>
+                                        <span className="text-gray-400">Current Rank</span>
                                     </div>
-                                    <span className="text-2xl font-bold text-emerald-400">
+                                    <span className="text-2xl font-bold text-[#00E5FF]">
                                         #{stats.current_rank}
                                     </span>
                                 </div>
@@ -155,9 +148,9 @@ function ProfilePage() {
                     {/* Share Button */}
                     <button
                         onClick={handleShare}
-                        className="w-full mt-6 py-4 bg-gradient-to-r from-pink-600 to-violet-600 
-                                  hover:from-pink-500 hover:to-violet-500 rounded-xl font-bold text-lg
-                                  shadow-lg shadow-pink-500/30 transition-all transform active:scale-95
+                        className="w-full mt-6 py-4 bg-gradient-to-r from-cyan-500 to-[#00E5FF] text-black
+                                  hover:brightness-110 rounded-2xl font-bold text-lg
+                                  shadow-lg shadow-[#00E5FF]/30 transition-all transform active:scale-95
                                   flex items-center justify-center gap-2"
                     >
                         <span>📤</span> Share My Stats

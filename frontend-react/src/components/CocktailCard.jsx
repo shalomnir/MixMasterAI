@@ -13,9 +13,10 @@ function CocktailCard({ recipe, onClick }) {
     return (
         <div
             onClick={() => onClick(recipe)}
-            className="relative aspect-[4/5] rounded-2xl overflow-hidden cursor-pointer
-                 bg-black border border-white/5
+            className="relative aspect-[4/5] rounded-3xl overflow-hidden cursor-pointer
+                 bg-black border border-[#00E5FF]/20 hover:border-[#00E5FF]/40
                  hover:scale-[1.02] active:scale-95 transition-all duration-200
+                 shadow-lg shadow-[#00E5FF]/5 hover:shadow-[#00E5FF]/15
                  touch-manipulation group"
         >
             {/* Hero Image — fills the entire card */}
