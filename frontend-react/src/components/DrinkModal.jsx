@@ -1,13 +1,26 @@
 import { useState, useEffect, useMemo } from 'react';
+import { resolveImage, PLACEHOLDER_IMG } from '../utils/cocktailImages';
 
 function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
     const [isStrong, setIsStrong] = useState(false);
     const [isTaste, setIsTaste] = useState(false);
+    const [isVisible, setIsVisible] = useState(false);
+
+    const [imgSrc, setImgSrc] = useState(() => resolveImage(recipe));
+    const handleImageError = () => {
+        if (imgSrc !== PLACEHOLDER_IMG) setImgSrc(PLACEHOLDER_IMG);
+    };
+
+    // Entrance animation
+    useEffect(() => {
+        requestAnimationFrame(() => setIsVisible(true));
+    }, []);
 
     // Reset toggles when recipe changes
     useEffect(() => {
         setIsStrong(false);
         setIsTaste(false);
+        setImgSrc(resolveImage(recipe));
     }, [recipe]);
 
     const getTargetVolume = () => {
@@ -50,139 +63,170 @@ function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
     }, [recipe, pumpData, machineState, isStrong, isTaste]);
 
     const getPointsLabel = () => {
-        if (isStrong && isTaste) return `${points} PTS (2x STRONG TASTE!)`;
-        if (isStrong) return `${points} PTS (2x STRONG!)`;
+        if (isStrong && isTaste) return `${points} PTS (2× STRONG TASTE)`;
+        if (isStrong) return `${points} PTS (2× STRONG)`;
         if (isTaste) return `${points} PTS (Taste)`;
         return `${points} PTS`;
-    };
-
-    const getButtonText = () => {
-        if (isStrong && isTaste) return 'Strong Taste! 💪🥄';
-        if (isStrong) return 'Strong Pour! 💪 (2x PTS)';
-        if (isTaste) return 'Tasting Pour 🥄';
-        return 'Pour This Drink';
-    };
-
-    const getButtonGradient = () => {
-        if (isStrong && isTaste) return 'from-red-600 to-amber-500';
-        if (isStrong) return 'from-red-600 to-orange-600';
-        if (isTaste) return 'from-cyan-500 to-blue-600';
-        return 'from-pink-600 to-violet-600';
     };
 
     const handlePour = () => {
         onPour(recipe, { isStrong, isTaste });
     };
 
+    const handleClose = () => {
+        setIsVisible(false);
+        setTimeout(onClose, 200);
+    };
+
     return (
         <div className="fixed inset-0 z-[200]">
-            <div onClick={onClose} className="absolute inset-0 bg-black/80 backdrop-blur-md"></div>
+            {/* Backdrop */}
+            <div
+                onClick={handleClose}
+                className={`absolute inset-0 bg-black/90 backdrop-blur-sm transition-opacity duration-200
+                    ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+            />
 
-            <div className="absolute bottom-0 left-0 right-0 md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 
-                     md:max-w-lg md:bottom-auto md:rounded-3xl glass rounded-t-3xl md:rounded-b-3xl p-8 
-                     transform transition-transform duration-300 flex flex-col max-h-[90vh]"
-                style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}>
-
-                {/* Close Button */}
-                <button
-                    onClick={onClose}
-                    className="absolute top-4 right-4 w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 
-                    flex items-center justify-center transition touch-manipulation z-10"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-
-                {/* Header */}
-                <div className="flex-shrink-0">
-                    <div className="flex justify-center mb-4">
-                        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-pink-500 to-violet-500 
-                           flex items-center justify-center text-4xl shadow-lg">
-                            🍹
-                        </div>
+            {/* Modal */}
+            <div
+                className={`absolute bottom-0 left-0 right-0
+                     md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2
+                     md:max-w-lg md:bottom-auto md:rounded-3xl
+                     bg-black rounded-t-3xl md:rounded-b-3xl
+                     flex flex-col max-h-[92vh] overflow-hidden
+                     border border-white/5
+                     transition-all duration-300 ease-out
+                     ${isVisible
+                        ? 'translate-y-0 scale-100 opacity-100'
+                        : 'translate-y-8 scale-95 opacity-0'
+                    }`}
+            >
+                {/* ─── Hero Image Header ─── */}
+                <div className="relative w-full flex-shrink-0" style={{ height: '40%', minHeight: '220px' }}>
+                    <img
+                        src={imgSrc}
+                        alt={recipe.name}
+                        onError={handleImageError}
+                        className="w-full h-full object-cover"
+                    />
+                    {/* Gradient fade into black */}
+                    <div
+                        className="absolute inset-0 pointer-events-none"
+                        style={{ background: 'linear-gradient(to bottom, transparent 40%, #000000 100%)' }}
+                    />
+                    {/* Close button */}
+                    <button
+                        onClick={handleClose}
+                        className="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/60 backdrop-blur-sm
+                             flex items-center justify-center transition hover:bg-white/20 z-10"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                    {/* Title overlay at bottom of image */}
+                    <div className="absolute bottom-0 left-0 right-0 px-6 pb-4">
+                        <h2 className="text-3xl font-bold text-white drop-shadow-lg">{recipe.name}</h2>
+                        {recipe.description && (
+                            <p className="text-sm text-gray-400 mt-1 line-clamp-2">{recipe.description}</p>
+                        )}
                     </div>
-                    <h2 className="text-3xl font-bold text-center text-white mb-3">{recipe.name}</h2>
+                </div>
 
-                    {recipe.description && (
-                        <div className="mb-3">
-                            <p className="text-slate-300 text-center text-sm italic">{recipe.description}</p>
-                        </div>
-                    )}
-
-                    <div className="flex justify-center mb-4">
-                        <div className="bg-violet-600 px-4 py-1 rounded-full text-sm font-bold">
+                {/* ─── Scrollable Body ─── */}
+                <div className="flex-1 overflow-y-auto px-6 pt-4 pb-2">
+                    {/* Points Badge */}
+                    <div className="flex items-center gap-3 mb-5">
+                        <div className="bg-white/5 border border-white/10 px-4 py-1.5 rounded-full text-sm font-bold text-cyan-400">
                             {getPointsLabel()}
                         </div>
+                        <div className="bg-white/5 border border-white/10 px-3 py-1.5 rounded-full text-xs text-gray-400 uppercase tracking-wider">
+                            {recipe.category}
+                        </div>
+                    </div>
+
+                    {/* Ingredients — 2-column pill grid */}
+                    <p className="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-3">Ingredients</p>
+                    <div className="grid grid-cols-2 gap-3 mb-5">
+                        {ingredientsList.map((ing, idx) => (
+                            <div
+                                key={idx}
+                                className="flex items-center justify-between px-3 py-2.5
+                                     bg-white/[0.03] border border-white/10 rounded-xl"
+                            >
+                                <span className="text-sm text-white font-medium truncate mr-2">{ing.name}</span>
+                                <span className="text-sm text-cyan-400 font-bold whitespace-nowrap">{ing.amount}ml</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Toggles */}
+                    <div className="space-y-3 mb-4">
+                        <TogglePill
+                            label="Strong Drink"
+                            sublabel="50% more alcohol • 2× PTS"
+                            emoji="💪"
+                            active={isStrong}
+                            activeColor="amber"
+                            onToggle={() => setIsStrong(!isStrong)}
+                        />
+                        <TogglePill
+                            label="Tasting Pour"
+                            sublabel="Small portion"
+                            emoji="🥄"
+                            active={isTaste}
+                            activeColor="cyan"
+                            onToggle={() => setIsTaste(!isTaste)}
+                        />
                     </div>
                 </div>
 
-                {/* Scrollable Content */}
-                <div className="overflow-y-auto flex-grow" style={{ maxHeight: '50vh' }}>
-                    {/* Strong Toggle */}
-                    <div className={`mb-3 p-3 bg-slate-800/50 rounded-xl border-2 transition-colors
-                          ${isStrong ? 'border-amber-500' : 'border-transparent'}`}>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-white font-bold text-sm">Strong Drink 💪</p>
-                                <p className="text-slate-400 text-xs">50% more alcohol</p>
-                            </div>
-                            <button
-                                onClick={() => setIsStrong(!isStrong)}
-                                className={`w-16 h-8 rounded-full relative transition-all duration-300
-                           ${isStrong ? 'bg-amber-500' : 'bg-slate-700'}`}
-                            >
-                                <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white transition-all duration-300
-                               ${isStrong ? 'translate-x-8' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Taste Toggle */}
-                    <div className={`mb-4 p-3 bg-slate-800/50 rounded-xl border-2 transition-colors
-                          ${isTaste ? 'border-cyan-500' : 'border-transparent'}`}>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-white font-bold text-sm">Not Sure? Get a Taste 🥄</p>
-                                <p className="text-slate-400 text-xs">Small portion</p>
-                            </div>
-                            <button
-                                onClick={() => setIsTaste(!isTaste)}
-                                className={`w-16 h-8 rounded-full relative transition-all duration-300
-                           ${isTaste ? 'bg-cyan-500' : 'bg-slate-700'}`}
-                            >
-                                <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white transition-all duration-300
-                               ${isTaste ? 'translate-x-8' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Ingredients */}
-                    <div className="mb-4 bg-slate-800/50 rounded-xl p-4">
-                        <p className="text-slate-300 text-sm font-semibold mb-3">What's in it:</p>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-white text-sm">
-                            {ingredientsList.map((ing, idx) => (
-                                <div key={idx} className="contents">
-                                    <div className="text-left font-medium">{ing.name}</div>
-                                    <div className="text-right text-slate-400">{ing.amount}ml</div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Pour Button */}
-                <div className="flex-shrink-0 mt-4">
+                {/* ─── Pour CTA ─── */}
+                <div className="flex-shrink-0 px-6 pb-6 pt-3"
+                    style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+                >
                     <button
                         onClick={handlePour}
-                        className={`w-full py-4 bg-gradient-to-r ${getButtonGradient()} rounded-xl 
-                       font-bold text-lg shadow-lg hover:scale-[1.02] active:scale-95 
-                       transition-all transform touch-manipulation text-white`}
+                        className="w-full py-4 rounded-2xl font-bold text-base uppercase tracking-wider
+                             bg-gradient-to-r from-cyan-500 to-cyan-400 text-black
+                             shadow-lg shadow-[#00E5FF]/40
+                             hover:brightness-110 active:scale-95
+                             transition-all duration-150 touch-manipulation"
                     >
-                        {getButtonText()}
+                        Pour Cocktail
                     </button>
                 </div>
             </div>
+        </div>
+    );
+}
+
+/* ─── Toggle Pill subcomponent ─── */
+function TogglePill({ label, sublabel, emoji, active, activeColor, onToggle }) {
+    const borderClass = active
+        ? (activeColor === 'amber' ? 'border-amber-500/50' : 'border-cyan-500/50')
+        : 'border-white/5';
+    const bgSwitch = active
+        ? (activeColor === 'amber' ? 'bg-amber-500' : 'bg-cyan-500')
+        : 'bg-white/10';
+
+    return (
+        <div className={`flex items-center justify-between px-4 py-3
+                bg-white/[0.03] border rounded-xl transition-colors ${borderClass}`}>
+            <div className="flex items-center gap-2">
+                <span className="text-base">{emoji}</span>
+                <div>
+                    <p className="text-sm text-white font-semibold">{label}</p>
+                    <p className="text-[11px] text-gray-500">{sublabel}</p>
+                </div>
+            </div>
+            <button
+                onClick={onToggle}
+                className={`w-12 h-6 rounded-full relative transition-all duration-300 ${bgSwitch}`}
+            >
+                <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300
+                    ${active ? 'translate-x-6' : 'translate-x-0'}`} />
+            </button>
         </div>
     );
 }
