@@ -980,38 +980,40 @@ def start_new_event():
 @app.route('/api/admin/shutdown', methods=['POST'])
 @admin_required
 def admin_shutdown():
-    """Shutdown the Raspberry Pi (works from privileged Docker container)."""
+    """Shutdown the Raspberry Pi (works from privileged Docker container with pid:host)."""
     import platform
     import subprocess
-    import os
-    
+
     # Only allow shutdown on Linux (Raspberry Pi)
     if platform.system() != 'Linux':
         return jsonify({
             'status': 'error', 
             'message': f'Shutdown not supported on {platform.system()}. Only available on Raspberry Pi.'
         }), 400
-    
-    try:
-        # Use nsenter to run shutdown on the host from privileged container
-        # This requires --privileged flag in docker-compose
-        result = subprocess.run(
-            ['nsenter', '--target', '1', '--mount', '--uts', '--ipc', '--net', '--pid', 
-             '/bin/sh', '-c', 'shutdown -h now'],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        
-        if result.returncode == 0:
-            return jsonify({'status': 'success', 'message': 'Shutting down...'})
-        else:
-            # Fallback: try direct poweroff (might work if /sbin is mounted)
-            subprocess.Popen(['/sbin/poweroff'])
-            return jsonify({'status': 'success', 'message': 'Shutting down (fallback)...'})
-            
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Shutdown failed: {str(e)}'}), 500
+
+    def delayed_shutdown():
+        """Run shutdown after a short delay so the HTTP response can be sent."""
+        time.sleep(2)
+        try:
+            # Primary: nsenter into host PID namespace (requires pid:"host" in docker-compose)
+            subprocess.run(
+                ['nsenter', '--target', '1', '--mount', '--uts', '--ipc', '--net', '--pid',
+                 '--', '/sbin/shutdown', '-h', 'now'],
+                timeout=10
+            )
+        except Exception as e1:
+            print(f"[SHUTDOWN] nsenter failed: {e1}, trying sysrq fallback...")
+            try:
+                # Fallback: sysrq trigger (works in privileged containers)
+                with open('/proc/sysrq-trigger', 'w') as f:
+                    f.write('o')  # Power off
+            except Exception as e2:
+                print(f"[SHUTDOWN] All methods failed: {e2}")
+
+    t = threading.Thread(target=delayed_shutdown, daemon=True)
+    t.start()
+
+    return jsonify({'status': 'success', 'message': 'Shutting down in 2 seconds...'})
 
 
 @app.route('/api/admin/pump/<int:pump_id>/test', methods=['POST'])

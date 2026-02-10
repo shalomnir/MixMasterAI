@@ -9,6 +9,7 @@ services:
     ports:
       - "5000:5000"
     privileged: true
+    pid: "host"
     devices:
       - /dev/gpiomem:/dev/gpiomem
     volumes:
