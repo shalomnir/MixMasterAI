@@ -1,10 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { resolveImage, PLACEHOLDER_IMG } from '../utils/cocktailImages';
 
 function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
     const [isStrong, setIsStrong] = useState(false);
     const [isTaste, setIsTaste] = useState(false);
     const [isVisible, setIsVisible] = useState(false);
+    const [showScrollHint, setShowScrollHint] = useState(true);
+    const scrollRef = useRef(null);
 
     const [imgSrc, setImgSrc] = useState(() => resolveImage(recipe));
     const handleImageError = () => {
@@ -16,12 +18,20 @@ function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
         requestAnimationFrame(() => setIsVisible(true));
     }, []);
 
-    // Reset toggles when recipe changes
+    // Reset when recipe changes
     useEffect(() => {
         setIsStrong(false);
         setIsTaste(false);
         setImgSrc(resolveImage(recipe));
+        setShowScrollHint(true);
     }, [recipe]);
+
+    // Hide scroll hint when user scrolls
+    const handleScroll = () => {
+        if (scrollRef.current && scrollRef.current.scrollTop > 40) {
+            setShowScrollHint(false);
+        }
+    };
 
     const getTargetVolume = () => {
         if (isTaste) return machineState.taste_amount_ml || 30;
@@ -69,6 +79,42 @@ function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
         return `${points} PTS`;
     };
 
+    // ─── Dynamic button state ───
+    const getButtonConfig = () => {
+        if (isStrong && isTaste) {
+            return {
+                text: 'Pour Strong Taste',
+                gradient: 'from-fuchsia-600 to-pink-500',
+                glow: 'shadow-fuchsia-500/50',
+                textColor: 'text-white',
+            };
+        }
+        if (isStrong) {
+            return {
+                text: 'Pour Stronger',
+                gradient: 'from-fuchsia-600 to-violet-500',
+                glow: 'shadow-fuchsia-500/40',
+                textColor: 'text-white',
+            };
+        }
+        if (isTaste) {
+            return {
+                text: 'Pour Taste',
+                gradient: 'from-cyan-600/60 to-cyan-500/60',
+                glow: 'shadow-cyan-500/20',
+                textColor: 'text-cyan-100',
+            };
+        }
+        return {
+            text: 'Pour Cocktail',
+            gradient: 'from-cyan-500 to-cyan-400',
+            glow: 'shadow-[#00E5FF]/40',
+            textColor: 'text-black',
+        };
+    };
+
+    const btnCfg = getButtonConfig();
+
     const handlePour = () => {
         onPour(recipe, { isStrong, isTaste });
     };
@@ -87,13 +133,15 @@ function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
                     ${isVisible ? 'opacity-100' : 'opacity-0'}`}
             />
 
-            {/* Modal */}
+            {/* Modal — single scrollable container */}
             <div
+                ref={scrollRef}
+                onScroll={handleScroll}
                 className={`absolute bottom-0 left-0 right-0
                      md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2
                      md:max-w-lg md:bottom-auto md:rounded-3xl
                      bg-black rounded-t-3xl md:rounded-b-3xl
-                     flex flex-col max-h-[92vh] overflow-hidden
+                     max-h-[92vh] overflow-y-auto overflow-x-hidden
                      border border-white/5
                      transition-all duration-300 ease-out
                      ${isVisible
@@ -101,18 +149,18 @@ function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
                         : 'translate-y-8 scale-95 opacity-0'
                     }`}
             >
-                {/* ─── Hero Image Header ─── */}
-                <div className="relative w-full flex-shrink-0" style={{ height: '40%', minHeight: '220px' }}>
+                {/* ─── 1. Hero Image ─── */}
+                <div className="relative w-full" style={{ minHeight: '280px' }}>
                     <img
                         src={imgSrc}
                         alt={recipe.name}
                         onError={handleImageError}
-                        className="w-full h-full object-cover"
+                        className="w-full h-72 object-cover"
                     />
                     {/* Gradient fade into black */}
                     <div
                         className="absolute inset-0 pointer-events-none"
-                        style={{ background: 'linear-gradient(to bottom, transparent 40%, #000000 100%)' }}
+                        style={{ background: 'linear-gradient(to bottom, transparent 50%, #000000 100%)' }}
                     />
                     {/* Close button */}
                     <button
@@ -124,19 +172,12 @@ function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
-                    {/* Title overlay at bottom of image */}
-                    <div className="absolute bottom-0 left-0 right-0 px-6 pb-4">
-                        <h2 className="text-3xl font-bold text-white drop-shadow-lg">{recipe.name}</h2>
-                        {recipe.description && (
-                            <p className="text-sm text-gray-400 mt-1 line-clamp-2">{recipe.description}</p>
-                        )}
-                    </div>
                 </div>
 
-                {/* ─── Scrollable Body ─── */}
-                <div className="flex-1 overflow-y-auto px-6 pt-4 pb-2">
-                    {/* Points Badge */}
-                    <div className="flex items-center gap-3 mb-5">
+                {/* ─── 2. Title & Category ─── */}
+                <div className="px-6 -mt-8 relative z-10">
+                    <h2 className="text-3xl font-bold text-white drop-shadow-lg">{recipe.name}</h2>
+                    <div className="flex items-center gap-3 mt-3">
                         <div className="bg-white/5 border border-white/10 px-4 py-1.5 rounded-full text-sm font-bold text-cyan-400">
                             {getPointsLabel()}
                         </div>
@@ -144,10 +185,12 @@ function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
                             {recipe.category}
                         </div>
                     </div>
+                </div>
 
-                    {/* Ingredients — 2-column pill grid */}
+                {/* ─── 3. Ingredients Grid ─── */}
+                <div className="px-6 mt-6">
                     <p className="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-3">Ingredients</p>
-                    <div className="grid grid-cols-2 gap-3 mb-5">
+                    <div className="grid grid-cols-2 gap-3">
                         {ingredientsList.map((ing, idx) => (
                             <div
                                 key={idx}
@@ -159,43 +202,69 @@ function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
                             </div>
                         ))}
                     </div>
-
-                    {/* Toggles */}
-                    <div className="space-y-3 mb-4">
-                        <TogglePill
-                            label="Strong Drink"
-                            sublabel="50% more alcohol • 2× PTS"
-                            emoji="💪"
-                            active={isStrong}
-                            activeColor="amber"
-                            onToggle={() => setIsStrong(!isStrong)}
-                        />
-                        <TogglePill
-                            label="Tasting Pour"
-                            sublabel="Small portion"
-                            emoji="🥄"
-                            active={isTaste}
-                            activeColor="cyan"
-                            onToggle={() => setIsTaste(!isTaste)}
-                        />
-                    </div>
                 </div>
 
-                {/* ─── Pour CTA ─── */}
-                <div className="flex-shrink-0 px-6 pb-6 pt-3"
-                    style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+                {/* ─── 4. Description ─── */}
+                {recipe.description && (
+                    <div className="px-6 mt-6">
+                        <p className="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-2">About</p>
+                        <p className="text-sm text-gray-400 leading-relaxed">{recipe.description}</p>
+                    </div>
+                )}
+
+                {/* ─── 5. Toggles ─── */}
+                <div className="px-6 mt-6 space-y-3">
+                    <TogglePill
+                        label="Strong Drink"
+                        sublabel="50% more alcohol • 2× PTS"
+                        emoji="💪"
+                        active={isStrong}
+                        activeColor="amber"
+                        onToggle={() => setIsStrong(!isStrong)}
+                    />
+                    <TogglePill
+                        label="Tasting Pour"
+                        sublabel="Small portion"
+                        emoji="🥄"
+                        active={isTaste}
+                        activeColor="cyan"
+                        onToggle={() => setIsTaste(!isTaste)}
+                    />
+                </div>
+
+                {/* ─── 6. Pour CTA (Grand Finale) ─── */}
+                <div className="px-6 pt-8 pb-8"
+                    style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}
                 >
                     <button
                         onClick={handlePour}
-                        className="w-full py-4 rounded-2xl font-bold text-base uppercase tracking-wider
-                             bg-gradient-to-r from-cyan-500 to-cyan-400 text-black
-                             shadow-lg shadow-[#00E5FF]/40
+                        className={`w-full py-4 rounded-2xl font-bold text-base uppercase tracking-wider
+                             bg-gradient-to-r ${btnCfg.gradient} ${btnCfg.textColor}
+                             shadow-lg ${btnCfg.glow}
                              hover:brightness-110 active:scale-95
-                             transition-all duration-150 touch-manipulation"
+                             transition-all duration-200 touch-manipulation`}
                     >
-                        Pour Cocktail
+                        {btnCfg.text}
                     </button>
                 </div>
+
+                {/* ─── Scroll Hint Overlay ─── */}
+                {showScrollHint && (
+                    <div className="sticky bottom-0 left-0 right-0 pointer-events-none z-20">
+                        <div
+                            className="h-16 flex items-end justify-center pb-3"
+                            style={{ background: 'linear-gradient(to bottom, transparent, #000000)' }}
+                        >
+                            <svg
+                                className="w-5 h-5 text-white/50 animate-bounce"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

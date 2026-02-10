@@ -1,10 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import { usePour } from '../hooks/usePour';
 import { useToast } from '../hooks/useToast';
 import CocktailCard from '../components/CocktailCard';
 import NavigationBar from '../components/NavigationBar';
 import DrinkModal from '../components/DrinkModal';
+
+const CATEGORY_TABS = [
+    { key: 'all', label: 'All' },
+    { key: 'classic', label: 'Classics' },
+    { key: 'highball', label: 'Highballs' },
+    { key: 'shot', label: 'Shots' },
+];
 
 function MenuPage() {
     const [recipes, setRecipes] = useState({ classic: [], highball: [], shot: [] });
@@ -14,6 +21,8 @@ function MenuPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedRecipe, setSelectedRecipe] = useState(null);
+    const [activeCategory, setActiveCategory] = useState('all');
+    const [isFading, setIsFading] = useState(false);
     const { startPour } = usePour();
     const { showHighball, showError } = useToast();
 
@@ -29,17 +38,13 @@ function MenuPage() {
                 api.getSettings()
             ]);
 
-            // Build pump data map - handle both object and array formats
+            // Build pump data map
             const pumps = {};
             if (pumpsResponse.pumps) {
                 const pumpsData = pumpsResponse.pumps;
                 if (Array.isArray(pumpsData)) {
-                    // API returns array
-                    pumpsData.forEach(p => {
-                        pumps[p.id] = p;
-                    });
+                    pumpsData.forEach(p => { pumps[p.id] = p; });
                 } else {
-                    // API returns object/dictionary keyed by pump ID
                     Object.entries(pumpsData).forEach(([id, p]) => {
                         pumps[id] = { ...p, id: parseInt(id) };
                     });
@@ -47,7 +52,6 @@ function MenuPage() {
             }
             setPumpData(pumps);
 
-            // Machine state
             setMachineState({
                 classic_target_vol: pumpsResponse.classic_target_vol || 110,
                 highball_target_vol: pumpsResponse.highball_target_vol || 90,
@@ -55,12 +59,10 @@ function MenuPage() {
                 taste_amount_ml: pumpsResponse.taste_amount_ml || 30
             });
 
-            // Event name
             if (settingsResponse.current_event_name) {
                 setEventName(settingsResponse.current_event_name);
             }
 
-            // Recipes by category
             setRecipes({
                 classic: recipesResponse.classic_cocktails || [],
                 highball: recipesResponse.highballs || [],
@@ -77,6 +79,24 @@ function MenuPage() {
         }
     };
 
+    // Filtered cocktails based on active tab
+    const filteredRecipes = useMemo(() => {
+        if (activeCategory === 'all') {
+            return [...recipes.classic, ...recipes.highball, ...recipes.shot];
+        }
+        return recipes[activeCategory] || [];
+    }, [recipes, activeCategory]);
+
+    // Smooth category switch with fade
+    const switchCategory = (key) => {
+        if (key === activeCategory) return;
+        setIsFading(true);
+        setTimeout(() => {
+            setActiveCategory(key);
+            setIsFading(false);
+        }, 150);
+    };
+
     const handleDrinkClick = (recipe) => {
         setSelectedRecipe(recipe);
     };
@@ -87,9 +107,7 @@ function MenuPage() {
 
     const handlePour = async (recipe, options) => {
         setSelectedRecipe(null);
-
         const result = await startPour(recipe, options, pumpData, machineState);
-
         if (result.success && result.response.is_highball) {
             setTimeout(() => showHighball(), 1500);
         }
@@ -97,12 +115,12 @@ function MenuPage() {
 
     if (isLoading) {
         return (
-            <div className="bg-slate-900 text-white min-h-[100dvh] flex flex-col">
+            <div className="bg-black text-white min-h-[100dvh] flex flex-col">
                 <Header eventName={eventName} />
                 <div className="flex-1 flex items-center justify-center">
                     <div className="text-center py-20">
                         <div className="spinner mx-auto mb-4"></div>
-                        <p className="text-slate-400">Loading drinks...</p>
+                        <p className="text-gray-500">Loading drinks...</p>
                     </div>
                 </div>
                 <NavigationBar />
@@ -112,14 +130,14 @@ function MenuPage() {
 
     if (error) {
         return (
-            <div className="bg-slate-900 text-white min-h-[100dvh] flex flex-col">
+            <div className="bg-black text-white min-h-[100dvh] flex flex-col">
                 <Header eventName={eventName} />
                 <div className="flex-1 flex items-center justify-center">
                     <div className="text-center py-20">
                         <p className="text-red-400 text-lg mb-4">{error}</p>
                         <button
                             onClick={() => window.location.reload()}
-                            className="px-6 py-2 bg-pink-600 hover:bg-pink-700 rounded-lg transition"
+                            className="px-6 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg transition"
                         >
                             Retry
                         </button>
@@ -131,49 +149,49 @@ function MenuPage() {
     }
 
     return (
-        <div className="bg-slate-900 text-white min-h-[100dvh] flex flex-col">
+        <div className="bg-black text-white min-h-[100dvh] flex flex-col">
             <Header eventName={eventName} />
 
-            <main className="flex-grow container mx-auto px-4 pt-0 pb-24">
-                <div className="space-y-8">
-                    <div className="flex justify-between items-end mb-2">
-                        <div>
-                            <h2 className="text-2xl font-bold text-white mb-0">Menu</h2>
-                            <p className="text-slate-400 text-sm">Select a drink to pour.</p>
-                        </div>
-                    </div>
-
-                    {/* Classic Cocktails */}
-                    {recipes.classic.length > 0 && (
-                        <CategorySection
-                            title="Classic Cocktails"
-                            color="pink"
-                            recipes={recipes.classic}
-                            onDrinkClick={handleDrinkClick}
-                        />
-                    )}
-
-                    {/* Highballs */}
-                    {recipes.highball.length > 0 && (
-                        <CategorySection
-                            title="Highballs"
-                            subtitle="Add Soda/Tonic after pouring"
-                            color="cyan"
-                            recipes={recipes.highball}
-                            onDrinkClick={handleDrinkClick}
-                        />
-                    )}
-
-                    {/* Shots */}
-                    {recipes.shot.length > 0 && (
-                        <CategorySection
-                            title="Shots"
-                            color="amber"
-                            recipes={recipes.shot}
-                            onDrinkClick={handleDrinkClick}
-                        />
-                    )}
+            {/* ─── Category Tab Bar ─── */}
+            <div className="sticky top-0 z-50 bg-black/80 backdrop-blur-md border-b border-white/5">
+                <div className="flex gap-2 px-4 py-3 overflow-x-auto scrollbar-hide">
+                    {CATEGORY_TABS.map(tab => (
+                        <button
+                            key={tab.key}
+                            onClick={() => switchCategory(tab.key)}
+                            className={`flex-shrink-0 px-5 py-2 rounded-full text-sm font-semibold
+                                transition-all duration-200 touch-manipulation whitespace-nowrap
+                                ${activeCategory === tab.key
+                                    ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/30'
+                                    : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/5'
+                                }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
+            </div>
+
+            {/* ─── Cocktail Grid ─── */}
+            <main className="flex-grow container mx-auto px-4 pt-4 pb-24">
+                <div
+                    className={`grid grid-cols-2 gap-4 transition-opacity duration-150
+                        ${isFading ? 'opacity-0' : 'opacity-100'}`}
+                >
+                    {filteredRecipes.map(recipe => (
+                        <CocktailCard
+                            key={recipe.id}
+                            recipe={recipe}
+                            onClick={handleDrinkClick}
+                        />
+                    ))}
+                </div>
+
+                {filteredRecipes.length === 0 && (
+                    <div className="text-center py-20">
+                        <p className="text-gray-500 text-sm">No cocktails in this category.</p>
+                    </div>
+                )}
             </main>
 
             <NavigationBar />
@@ -194,60 +212,14 @@ function MenuPage() {
 
 function Header({ eventName }) {
     return (
-        <>
-            <header className="px-4 pt-1 text-center pb-0">
-                <h1 className="text-xl font-bold gradient-text-pink">
-                    MixMasterAI
-                </h1>
-            </header>
-            <div className="px-4 pt-1 text-center">
-                <h2 className="text-lg font-semibold text-white">
-                    {eventName ? `Menu - ${eventName}` : 'Menu'}
-                </h2>
-                <p className="text-slate-400 text-sm">Select a drink to pour.</p>
-            </div>
-        </>
-    );
-}
-
-function CategorySection({ title, subtitle, color, recipes, onDrinkClick }) {
-    const gradients = {
-        pink: 'from-pink-500 to-violet-500',
-        cyan: 'from-cyan-500 to-blue-500',
-        amber: 'from-amber-500 to-orange-500'
-    };
-
-    const textGradients = {
-        pink: 'from-pink-400 to-violet-400',
-        cyan: 'from-cyan-400 to-blue-400',
-        amber: 'from-amber-400 to-orange-400'
-    };
-
-    return (
-        <div className="category-section">
-            <div className="flex items-center gap-3 mb-4">
-                <div className={`h-1 w-12 bg-gradient-to-r ${gradients[color]} rounded-full`}></div>
-                <div className="flex flex-col">
-                    <h3 className={`text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r ${textGradients[color]}`}>
-                        {title}
-                    </h3>
-                    {subtitle && (
-                        <p className="text-[10px] text-slate-400 italic">{subtitle}</p>
-                    )}
-                </div>
-                <div className={`h-1 flex-grow bg-gradient-to-r ${gradients[color].replace('500', '500/50')} to-transparent rounded-full`}></div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-                {recipes.map(recipe => (
-                    <CocktailCard
-                        key={recipe.id}
-                        recipe={recipe}
-                        color={color}
-                        onClick={onDrinkClick}
-                    />
-                ))}
-            </div>
-        </div>
+        <header className="px-4 pt-3 pb-1 text-center">
+            <h1 className="text-xl font-bold gradient-text-pink">
+                MixMasterAI
+            </h1>
+            {eventName && (
+                <p className="text-sm text-gray-500 mt-0.5">{eventName}</p>
+            )}
+        </header>
     );
 }
 
