@@ -33,12 +33,6 @@ const IMAGE_MAP = {
     'White Rum Shot': 'shots.webp',
 };
 
-/**
- * Resolve the image source for a cocktail:
- *  1. Use `image_url` from the API if it exists
- *  2. Look up the cocktail name in IMAGE_MAP
- *  3. Fall back to the placeholder
- */
 function resolveImage(recipe) {
     if (recipe.image_url) {
         return `${IMG_BASE}${recipe.image_url}`;
@@ -56,30 +50,63 @@ function CocktailCard({ recipe, color = 'pink', onClick }) {
         }
     };
 
+    const accentColors = {
+        'pink': { btn: 'from-pink-500 to-violet-500', glow: 'shadow-pink-500/30' },
+        'cyan': { btn: 'from-cyan-500 to-blue-500', glow: 'shadow-[#00E5FF]/40' },
+        'amber': { btn: 'from-amber-500 to-orange-500', glow: 'shadow-amber-500/30' },
+    };
+
+    const accent = accentColors[color] || accentColors.pink;
+
     return (
         <div
             onClick={() => onClick(recipe)}
-            className="glass rounded-2xl aspect-square relative overflow-hidden cursor-pointer 
-                 hover:scale-[1.02] active:scale-95 transition-all transform 
-                 border border-white/5 flex flex-col items-center justify-center p-4 gap-2
+            className="group bg-[#1A1A1A] rounded-2xl overflow-hidden cursor-pointer
+                 hover:scale-[1.02] active:scale-95 transition-all duration-200
+                 border border-white/5 flex flex-col
                  touch-manipulation"
         >
-            <div className="flex-shrink-0 w-14 h-14 rounded-full overflow-hidden shadow-lg ring-1 ring-white/10">
+            {/* Hero Image */}
+            <div className="relative h-48 w-full overflow-hidden">
                 <img
                     src={imgSrc}
                     alt={recipe.name}
                     loading="lazy"
                     onError={handleImageError}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+                {/* Bottom gradient mask – blends image into the card body */}
+                <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{
+                        background: 'linear-gradient(to bottom, transparent 60%, #1A1A1A 100%)',
+                    }}
                 />
             </div>
-            <div className="w-full flex flex-col items-center">
-                <h3 className="text-lg font-extrabold text-white text-center line-clamp-1 leading-tight mb-1">
+
+            {/* Content */}
+            <div className="p-4 pt-1 flex flex-col flex-1">
+                <h3 className="text-xl font-bold text-white line-clamp-1 leading-tight mb-1">
                     {recipe.name}
                 </h3>
-                <p className="text-xs text-slate-400 text-center line-clamp-2 leading-snug px-1 font-medium">
+                <p className="text-sm text-gray-400 line-clamp-2 leading-snug mb-3 flex-1">
                     {recipe.description || ''}
                 </p>
+
+                {/* Pour CTA */}
+                <button
+                    className={`w-full py-2 rounded-xl text-sm font-bold text-white
+                        bg-gradient-to-r ${accent.btn}
+                        shadow-lg ${accent.glow}
+                        hover:brightness-110 active:brightness-90
+                        transition-all duration-150`}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onClick(recipe);
+                    }}
+                >
+                    Pour
+                </button>
             </div>
         </div>
     );
