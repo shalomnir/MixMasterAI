@@ -166,8 +166,10 @@ class CocktailAPI {
     async tokenLogin(token) {
         const response = await this.get(`/api/auth/token-login/${token}`);
         if (response.status === 'success') {
-            this.setToken(response.token);
-            this.setUser(response.user);
+            // Store in sessionStorage only — the URL is the identity, not localStorage.
+            // A fresh browser visit to /u/:token will always re-authenticate.
+            sessionStorage.setItem(this.tokenKey, response.token);
+            sessionStorage.setItem(this.userKey, JSON.stringify(response.user));
         }
         return response;
     }
