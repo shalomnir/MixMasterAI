@@ -21,16 +21,6 @@ function App() {
                         <MenuPage />
                     </ProtectedRoute>
                 } />
-                <Route path="/profile" element={
-                    <ProtectedRoute>
-                        <ProfilePage />
-                    </ProtectedRoute>
-                } />
-                <Route path="/leaderboard" element={
-                    <ProtectedRoute>
-                        <LeaderboardPage />
-                    </ProtectedRoute>
-                } />
 
                 {/* Admin Route */}
                 <Route path="/admin" element={
