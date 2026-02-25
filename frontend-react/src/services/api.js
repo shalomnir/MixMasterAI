@@ -132,8 +132,12 @@ class CocktailAPI {
     async register(nickname) {
         const response = await this.post('/api/auth/register', { nickname });
         if (response.status === 'success') {
-            this.setToken(response.token);
-            this.setUser(response.user);
+            // Purge localStorage — the user's magic link URL is their identity.
+            localStorage.removeItem(this.tokenKey);
+            localStorage.removeItem(this.userKey);
+            // Session only (cleared when tab/browser closes).
+            sessionStorage.setItem(this.tokenKey, response.token);
+            sessionStorage.setItem(this.userKey, JSON.stringify(response.user));
         }
         return response;
     }
@@ -157,8 +161,11 @@ class CocktailAPI {
     async recover(recoveryKey) {
         const response = await this.post('/api/auth/recovery', { recovery_key: recoveryKey });
         if (response.status === 'success') {
-            this.setToken(response.token);
-            this.setUser(response.user);
+            // Purge localStorage — token URL is identity.
+            localStorage.removeItem(this.tokenKey);
+            localStorage.removeItem(this.userKey);
+            sessionStorage.setItem(this.tokenKey, response.token);
+            sessionStorage.setItem(this.userKey, JSON.stringify(response.user));
         }
         return response;
     }

@@ -10,12 +10,13 @@ function RecoveryPage() {
     const { isAuthenticated, recover } = useAuth();
     const navigate = useNavigate();
 
-    // Redirect if already authenticated
+    // Only auto-redirect if there's a persistent localStorage session
     useEffect(() => {
-        if (isAuthenticated) {
+        const hasPersistentSession = !!localStorage.getItem('cocktail_auth_token');
+        if (hasPersistentSession) {
             navigate('/menu');
         }
-    }, [isAuthenticated, navigate]);
+    }, [navigate]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -23,8 +24,13 @@ function RecoveryPage() {
         setIsLoading(true);
 
         try {
-            await recover(recoveryKey.trim().toUpperCase());
-            navigate('/menu');
+            const response = await recover(recoveryKey.trim().toUpperCase());
+            const personalToken = response?.user?.personal_token;
+            if (personalToken) {
+                navigate(`/u/${personalToken}`, { replace: true });
+            } else {
+                navigate('/menu');
+            }
         } catch (err) {
             setError(err.message);
         } finally {

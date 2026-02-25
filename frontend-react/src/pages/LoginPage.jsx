@@ -11,12 +11,15 @@ function LoginPage() {
     const { isAuthenticated, register, loginAsAdmin } = useAuth();
     const navigate = useNavigate();
 
-    // Redirect if already authenticated
+    // Only auto-redirect if the user has a PERSISTENT localStorage session
+    // (i.e. a non-magic-link login). Magic-link users have sessionStorage only
+    // and must always enter via their /u/:token URL.
     useEffect(() => {
-        if (isAuthenticated) {
+        const hasPersistentSession = !!localStorage.getItem('cocktail_auth_token');
+        if (hasPersistentSession) {
             navigate('/menu');
         }
-    }, [isAuthenticated, navigate]);
+    }, [navigate]);
 
     // Load event name
     useEffect(() => {
@@ -42,8 +45,15 @@ function LoginPage() {
                 navigate('/admin');
                 return;
             }
-            await register(nickname.trim());
-            navigate('/menu');
+            const response = await register(nickname.trim());
+            // Redirect to the user's permanent magic link URL
+            const personalToken = response?.user?.personal_token;
+            if (personalToken) {
+                navigate(`/u/${personalToken}`, { replace: true });
+            } else {
+                // Fallback if token missing (shouldn't happen after migration)
+                navigate('/menu');
+            }
         } catch (err) {
             const message = err.isServerDown
                 ? '⚠️ Server is offline. Please ensure the backend is running.'
@@ -117,16 +127,6 @@ function LoginPage() {
                             </button>
                         </form>
 
-                        {/* Recovery Link */}
-                        <div className="pt-4 border-t border-white/5">
-                            <p className="text-gray-600 text-sm md:text-base mb-3">Lost your session?</p>
-                            <a
-                                href="/recovery"
-                                className="text-[#00E5FF]/70 hover:text-[#00E5FF] text-base font-semibold transition-colors"
-                            >
-                                → Recover Account with Key
-                            </a>
-                        </div>
                     </div>
                 </div>
             </div>

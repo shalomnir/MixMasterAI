@@ -2,9 +2,6 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import LoginPage from './pages/LoginPage'
 import MenuPage from './pages/MenuPage'
-import LeaderboardPage from './pages/LeaderboardPage'
-import ProfilePage from './pages/ProfilePage'
-import RecoveryPage from './pages/RecoveryPage'
 import AdminDashboard from './pages/AdminDashboard'
 import MagicLinkPage from './pages/MagicLinkPage'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -16,7 +13,6 @@ function App() {
             <Routes>
                 {/* Public Routes */}
                 <Route path="/" element={<LoginPage />} />
-                <Route path="/recovery" element={<RecoveryPage />} />
                 <Route path="/u/:token" element={<MagicLinkPage />} />
 
                 {/* Protected User Routes */}
