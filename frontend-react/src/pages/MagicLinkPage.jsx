@@ -37,6 +37,11 @@ function MagicLinkPage() {
             return;
         }
 
+        // Immediately wipe any localStorage session — the URL is the only identity.
+        // This prevents visiting / from auto-logging in a magic-link user.
+        localStorage.removeItem('cocktail_auth_token');
+        localStorage.removeItem('cocktail_user');
+
         let cancelled = false;
 
         // Re-authenticate on every visit using the URL token.

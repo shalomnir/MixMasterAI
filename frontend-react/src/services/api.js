@@ -166,8 +166,11 @@ class CocktailAPI {
     async tokenLogin(token) {
         const response = await this.get(`/api/auth/token-login/${token}`);
         if (response.status === 'success') {
-            // Store in sessionStorage only — the URL is the identity, not localStorage.
-            // A fresh browser visit to /u/:token will always re-authenticate.
+            // The URL is the identity — purge any localStorage session so that
+            // visiting / never auto-logs the user in.
+            localStorage.removeItem(this.tokenKey);
+            localStorage.removeItem(this.userKey);
+            // Keep only a sessionStorage entry (lives while the tab is open).
             sessionStorage.setItem(this.tokenKey, response.token);
             sessionStorage.setItem(this.userKey, JSON.stringify(response.user));
         }
