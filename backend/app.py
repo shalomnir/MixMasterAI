@@ -109,6 +109,32 @@ def ensure_db_initialized():
             db.session.commit()
             print("[INIT] Default pumps created via before_request.")
 
+        # --- Auto-migrate: add personal_token column if missing ---
+        try:
+            User.query.with_entities(User.personal_token).first()
+        except Exception:
+            print("[MIGRATE] Adding personal_token column to user table...")
+            with db.engine.connect() as conn:
+                conn.execute(db.text('ALTER TABLE user ADD COLUMN personal_token VARCHAR(36)'))
+                conn.commit()
+            print("[MIGRATE] personal_token column added.")
+
+        # Backfill personal_token for any users that don't have one yet
+        import uuid as _uuid
+        users_missing_token = User.query.filter_by(personal_token=None).all()
+        if users_missing_token:
+            existing_tokens = {u.personal_token for u in User.query.all() if u.personal_token}
+            for u in users_missing_token:
+                while True:
+                    token = str(_uuid.uuid4())
+                    if token not in existing_tokens:
+                        existing_tokens.add(token)
+                        break
+                u.personal_token = token
+            db.session.commit()
+            print(f"[MIGRATE] Backfilled personal_token for {len(users_missing_token)} user(s).")
+
+
 # --- JWT Utilities ---
 
 def create_token(user_id, is_admin=False):
