@@ -4,6 +4,7 @@ from datetime import datetime
 import json
 import secrets
 import string
+import uuid
 
 db = SQLAlchemy()
 
@@ -12,6 +13,7 @@ class User(UserMixin, db.Model):
     nickname = db.Column(db.String(80), unique=True, nullable=False)
     recovery_key = db.Column(db.String(6), unique=True, nullable=False)
     points = db.Column(db.Integer, default=0)
+    personal_token = db.Column(db.String(36), unique=True, nullable=True)
     
     @staticmethod
     def generate_recovery_key():
@@ -22,6 +24,14 @@ class User(UserMixin, db.Model):
             # Check if key already exists
             if not User.query.filter_by(recovery_key=key).first():
                 return key
+
+    @staticmethod
+    def generate_personal_token():
+        """Generate a unique UUID4 personal access token (magic link token)"""
+        while True:
+            token = str(uuid.uuid4())
+            if not User.query.filter_by(personal_token=token).first():
+                return token
     
     def to_dict(self):
         return {
@@ -29,6 +39,7 @@ class User(UserMixin, db.Model):
             'nickname': self.nickname,
             'points': self.points,
             'recovery_key': self.recovery_key,
+            'personal_token': self.personal_token,
         }
 
     def __repr__(self):

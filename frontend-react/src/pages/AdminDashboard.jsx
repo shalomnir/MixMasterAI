@@ -141,6 +141,17 @@ function AdminDashboard() {
         window.location.href = '/';
     };
 
+    const handleCopyLink = async (token) => {
+        if (!token) return;
+        const url = `https://mixmasterai.app/u/${token}`;
+        try {
+            await navigator.clipboard.writeText(url);
+            showSuccess('Magic link copied!');
+        } catch {
+            showError('Could not copy — please copy manually.');
+        }
+    };
+
     // Helper to normalize pumps after API calls
     const normalizePumps = (pumpsData) => {
         return Array.isArray(pumpsData)
@@ -502,24 +513,44 @@ function AdminDashboard() {
                                 <thead className="bg-slate-950 text-slate-400 font-medium border-b border-slate-800">
                                     <tr>
                                         <th className="px-6 py-3">Nickname</th>
+                                        <th className="px-6 py-3">Points</th>
+                                        <th className="px-6 py-3">Personal Link</th>
                                         <th className="px-6 py-3">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-800">
                                     {users.length === 0 ? (
                                         <tr>
-                                            <td colSpan={2} className="p-8 text-center text-slate-500 text-sm">No users yet.</td>
+                                            <td colSpan={4} className="p-8 text-center text-slate-500 text-sm">No users yet.</td>
                                         </tr>
                                     ) : (
                                         users.map(u => (
                                             <tr key={u.id} className="hover:bg-slate-800/50 transition-colors">
                                                 <td className="px-6 py-4">
                                                     <span className="font-semibold text-slate-200">{u.nickname}</span>
+                                                    {u.is_admin && (
+                                                        <span className="ml-2 text-[10px] bg-pink-500/20 text-pink-400 border border-pink-500/30 px-1.5 py-0.5 rounded-full font-bold">ADMIN</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="font-mono text-cyan-400 font-bold">{u.points ?? 0}</span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {u.personal_token ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-mono text-[11px] text-slate-400 bg-slate-950 border border-slate-700 px-2 py-1 rounded truncate max-w-[140px]">
+                                                                /u/{u.personal_token.slice(0, 8)}…
+                                                            </span>
+                                                            <CopyButton onClick={() => handleCopyLink(u.personal_token)} />
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-600 text-xs italic">No token yet</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <button
                                                         onClick={() => handleDeleteUser(u.id)}
-                                                        className="text-xs text-red-400 hover:text-red-300"
+                                                        className="text-xs text-red-400 hover:text-red-300 transition-colors"
                                                     >
                                                         Delete
                                                     </button>
@@ -554,6 +585,41 @@ function AdminDashboard() {
                 />
             )}
         </div>
+    );
+}
+
+/** Small clipboard button that shows a ✓ for 1.5s after clicking */
+function CopyButton({ onClick }) {
+    const [copied, setCopied] = useState(false);
+
+    const handleClick = async () => {
+        await onClick();
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+    };
+
+    return (
+        <button
+            type="button"
+            onClick={handleClick}
+            title="Copy magic link"
+            className={`flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-md border transition-all
+                ${copied
+                    ? 'bg-green-500/20 border-green-500/50 text-green-400'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-cyan-400 hover:border-cyan-500/50'
+                }`}
+        >
+            {copied ? (
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                    <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z" />
+                </svg>
+            ) : (
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                    <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z" />
+                    <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z" />
+                </svg>
+            )}
+        </button>
     );
 }
 
@@ -736,8 +802,8 @@ function PumpModal({ pump, onClose, onSave }) {
                                     onClick={() => handleTestPump('on')}
                                     disabled={pumpState === 'running'}
                                     className={`flex-1 py-2 rounded-lg font-medium transition ${pumpState === 'on'
-                                            ? 'bg-green-600 text-white'
-                                            : 'bg-green-900/30 text-green-400 hover:bg-green-900/50'
+                                        ? 'bg-green-600 text-white'
+                                        : 'bg-green-900/30 text-green-400 hover:bg-green-900/50'
                                         }`}
                                 >
                                     ▶ ON
@@ -747,8 +813,8 @@ function PumpModal({ pump, onClose, onSave }) {
                                     onClick={() => handleTestPump('off')}
                                     disabled={pumpState === 'running'}
                                     className={`flex-1 py-2 rounded-lg font-medium transition ${pumpState === 'off'
-                                            ? 'bg-red-600 text-white'
-                                            : 'bg-red-900/30 text-red-400 hover:bg-red-900/50'
+                                        ? 'bg-red-600 text-white'
+                                        : 'bg-red-900/30 text-red-400 hover:bg-red-900/50'
                                         }`}
                                 >
                                     ⏹ OFF

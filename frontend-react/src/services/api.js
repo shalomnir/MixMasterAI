@@ -163,6 +163,15 @@ class CocktailAPI {
         return response;
     }
 
+    async tokenLogin(token) {
+        const response = await this.get(`/api/auth/token-login/${token}`);
+        if (response.status === 'success') {
+            this.setToken(response.token);
+            this.setUser(response.user);
+        }
+        return response;
+    }
+
     async getCurrentUser() {
         return this.get('/api/auth/me');
     }

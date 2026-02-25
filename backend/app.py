@@ -214,7 +214,8 @@ def auth_register():
             return jsonify({'status': 'error', 'message': 'Nickname already taken. Please choose another one.'}), 400
 
         recovery_key = User.generate_recovery_key()
-        user = User(nickname=validated_nickname, recovery_key=recovery_key)
+        personal_token = User.generate_personal_token()
+        user = User(nickname=validated_nickname, recovery_key=recovery_key, personal_token=personal_token)
         db.session.add(user)
         db.session.commit()
 
@@ -278,6 +279,24 @@ def auth_recovery():
     return jsonify({
         'status': 'success',
         'token': token,
+        'user': user.to_dict(),
+    })
+
+
+@app.route('/api/auth/token-login/<token>', methods=['GET'])
+def auth_token_login(token):
+    """Login via personal access token (magic link). Returns JWT and user details."""
+    if not token:
+        return jsonify({'status': 'error', 'message': 'Token required'}), 400
+
+    user = User.query.filter_by(personal_token=token).first()
+    if not user:
+        return jsonify({'status': 'error', 'message': 'Invalid or unknown token.'}), 404
+
+    jwt_token = create_token(user.id)
+    return jsonify({
+        'status': 'success',
+        'token': jwt_token,
         'user': user.to_dict(),
     })
 
@@ -675,7 +694,13 @@ def admin_get_recipes():
 def admin_get_users():
     users = User.query.all()
     return jsonify({'users': [
-        {'id': u.id, 'nickname': u.nickname, 'points': u.points, 'is_admin': u.nickname == 'Admin2001'}
+        {
+            'id': u.id,
+            'nickname': u.nickname,
+            'points': u.points,
+            'is_admin': u.nickname == 'Admin2001',
+            'personal_token': u.personal_token,
+        }
         for u in users
     ]})
 

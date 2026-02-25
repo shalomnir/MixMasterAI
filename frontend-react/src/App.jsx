@@ -6,6 +6,7 @@ import LeaderboardPage from './pages/LeaderboardPage'
 import ProfilePage from './pages/ProfilePage'
 import RecoveryPage from './pages/RecoveryPage'
 import AdminDashboard from './pages/AdminDashboard'
+import MagicLinkPage from './pages/MagicLinkPage'
 import ProtectedRoute from './components/ProtectedRoute'
 import PouringStatus from './components/PouringStatus'
 
@@ -16,6 +17,7 @@ function App() {
                 {/* Public Routes */}
                 <Route path="/" element={<LoginPage />} />
                 <Route path="/recovery" element={<RecoveryPage />} />
+                <Route path="/u/:token" element={<MagicLinkPage />} />
 
                 {/* Protected User Routes */}
                 <Route path="/menu" element={
