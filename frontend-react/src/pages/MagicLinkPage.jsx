@@ -30,6 +30,13 @@ function MagicLinkPage() {
     const [authedUser, setAuthedUser] = useState(null);
     const [activeTab, setActiveTab] = useState(TAB_MENU);
 
+    // Listen for "View Leaderboard" from the post-pour overlay
+    useEffect(() => {
+        const handler = () => setActiveTab(TAB_LEADERBOARD);
+        window.addEventListener('app:show-leaderboard', handler);
+        return () => window.removeEventListener('app:show-leaderboard', handler);
+    }, []);
+
     useEffect(() => {
         if (!token) {
             setErrorMsg('Invalid magic link — no token provided.');

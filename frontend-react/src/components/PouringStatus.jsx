@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { usePour } from '../hooks/usePour';
-import { useNavigate } from 'react-router-dom';
 import { resolveImage, PLACEHOLDER_IMG } from '../utils/cocktailImages';
 import api from '../services/api';
 
@@ -15,7 +14,6 @@ function PouringStatus() {
         pointsEarned,
         resetPour
     } = usePour();
-    const navigate = useNavigate();
 
     const [leaderboardData, setLeaderboardData] = useState(null);
     const [isVisible, setIsVisible] = useState(false);
@@ -92,7 +90,9 @@ function PouringStatus() {
         setIsVisible(false);
         setTimeout(() => {
             resetPour();
-            navigate('/leaderboard');
+            // Fire a custom event — MagicLinkPage listens and switches to the leaderboard tab.
+            // This avoids navigating away from /u/:token.
+            window.dispatchEvent(new CustomEvent('app:show-leaderboard'));
         }, 200);
     };
 
