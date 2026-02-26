@@ -384,7 +384,7 @@ def get_pumps():
         pump_data[str(pump.id)] = {
             'name': pump.ingredient_name,
             'is_alcohol': pump.is_alcohol,
-            'is_virtual': pump.is_virtual,
+            'is_active': pump.is_active,
             'seconds_per_50ml': pump.seconds_per_50ml,
         }
 

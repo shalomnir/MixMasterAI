@@ -49,17 +49,25 @@ function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
         const originalTotal = Object.values(recipe.ingredients).reduce((sum, ml) => sum + parseFloat(ml), 0);
         if (originalTotal === 0) return { points: 0, ingredientsList: [] };
 
+        // Build a map: ingredient_name → pump info (for alcohol detection)
+        const nameToInfo = {};
+        for (const pump of Object.values(pumpData)) {
+            const name = pump.name || pump.ingredient_name || '';
+            if (name) nameToInfo[name.toLowerCase()] = pump;
+        }
+
         let totalAlcoholMl = 0;
         const ingredients = [];
 
-        for (const [pumpId, ml] of Object.entries(recipe.ingredients)) {
-            const pump = pumpData[pumpId];
-            const ingredientName = pump ? pump.name : `Pump ${pumpId}`;
+        for (const [ingredientName, ml] of Object.entries(recipe.ingredients)) {
+            // Ingredient name IS the display name now
+            const pumpInfo = nameToInfo[ingredientName.toLowerCase()];
+            const isAlcohol = pumpInfo?.is_alcohol ?? false;
 
             let scaledMl = (parseFloat(ml) / originalTotal) * targetVol;
-            if (isStrong && pump?.is_alcohol) scaledMl *= 1.5;
+            if (isStrong && isAlcohol) scaledMl *= 1.5;
 
-            if (pump?.is_alcohol) {
+            if (isAlcohol) {
                 totalAlcoholMl += scaledMl;
             }
 
@@ -71,6 +79,7 @@ function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
 
         return { points: pts, ingredientsList: ingredients };
     }, [recipe, pumpData, machineState, isStrong, isTaste]);
+
 
     const getPointsLabel = () => {
         if (isStrong && isTaste) return `${points} PTS (2× STRONG TASTE)`;

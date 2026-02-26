@@ -80,14 +80,18 @@ function MenuPage() {
         }
     };
 
-    // Build dynamic spirit filter list from active pumps
+    // Build dynamic spirit filter list from ingredients present in available recipes
+    // (server already filtered out unavailable recipes, so this stays in sync)
     const spiritFilters = useMemo(() => {
         const BASE_SPIRITS = ['vodka', 'gin', 'tequila', 'rum', 'whiskey', 'bourbon'];
         const found = new Set();
-        for (const pump of Object.values(pumpData)) {
-            const name = (pump.name || pump.ingredient_name || '').toLowerCase();
-            for (const spirit of BASE_SPIRITS) {
-                if (name.includes(spirit)) found.add(spirit);
+        const allRecipes = [...recipes.classic, ...recipes.highball, ...recipes.shot];
+        for (const recipe of allRecipes) {
+            for (const ingName of Object.keys(recipe.ingredients || {})) {
+                const lower = ingName.toLowerCase();
+                for (const spirit of BASE_SPIRITS) {
+                    if (lower.includes(spirit)) found.add(spirit);
+                }
             }
         }
         const filters = [{ key: 'all', label: 'All' }];
@@ -97,7 +101,7 @@ function MenuPage() {
             }
         }
         return filters;
-    }, [pumpData]);
+    }, [recipes]);
 
     // Filtered cocktails based on category + spirit
     const filteredRecipes = useMemo(() => {
@@ -120,6 +124,7 @@ function MenuPage() {
 
         return pool;
     }, [recipes, activeCategory, activeSpirit]);
+
 
     // Smooth filter switch with fade
     const switchCategory = (key) => {
