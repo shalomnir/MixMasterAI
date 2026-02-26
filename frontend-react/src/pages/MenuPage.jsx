@@ -80,28 +80,17 @@ function MenuPage() {
         }
     };
 
-    // Build dynamic spirit filter list from ingredients present in available recipes
-    // (server already filtered out unavailable recipes, so this stays in sync)
+    // Build spirit filters from pumps marked as alcohol + active
     const spiritFilters = useMemo(() => {
-        const BASE_SPIRITS = ['vodka', 'gin', 'tequila', 'rum', 'whiskey', 'bourbon'];
-        const found = new Set();
-        const allRecipes = [...recipes.classic, ...recipes.highball, ...recipes.shot];
-        for (const recipe of allRecipes) {
-            for (const ingName of Object.keys(recipe.ingredients || {})) {
-                const lower = ingName.toLowerCase();
-                for (const spirit of BASE_SPIRITS) {
-                    if (lower.includes(spirit)) found.add(spirit);
-                }
-            }
-        }
         const filters = [{ key: 'all', label: 'All' }];
-        for (const spirit of BASE_SPIRITS) {
-            if (found.has(spirit)) {
-                filters.push({ key: spirit, label: spirit.charAt(0).toUpperCase() + spirit.slice(1) });
+        for (const pump of Object.values(pumpData)) {
+            const name = pump.name || pump.ingredient_name || '';
+            if (pump.is_active && pump.is_alcohol && name) {
+                filters.push({ key: name, label: name });
             }
         }
         return filters;
-    }, [recipes]);
+    }, [pumpData]);
 
     // Filtered cocktails based on category + spirit
     const filteredRecipes = useMemo(() => {
@@ -112,12 +101,12 @@ function MenuPage() {
             pool = recipes[activeCategory] || [];
         }
 
-        // Apply spirit filter — match ingredient names in recipe
+        // Apply spirit filter — exact ingredient name match
         if (activeSpirit !== 'all') {
             pool = pool.filter(recipe => {
                 const ings = recipe.ingredients || {};
                 return Object.keys(ings).some(name =>
-                    name.toLowerCase().includes(activeSpirit)
+                    name.toLowerCase() === activeSpirit.toLowerCase()
                 );
             });
         }
