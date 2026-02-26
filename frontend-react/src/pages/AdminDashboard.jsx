@@ -3,6 +3,15 @@ import api from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 
+// Known drink ingredients — used for autocomplete in pump assignment
+const COMMON_INGREDIENTS = [
+    'Vodka', 'Gin', 'Tequila Blanco', 'Tequila Silver', 'Rum', 'White Rum',
+    'Dark Rum', 'Bourbon', 'Whiskey', 'Triple Sec', 'Cointreau', 'Blue Curacao',
+    'Lime Juice', 'Lemon Juice', 'Simple Syrup', 'Agave Syrup', 'Grenadine',
+    'Cranberry Juice', 'Pineapple Juice', 'Orange Juice', 'Grapefruit Juice',
+    'Peach Schnapps', 'Elderflower Liqueur', 'Soda Water',
+];
+
 function AdminDashboard() {
     const { user, logout } = useAuth();
     const { showSuccess, showError } = useToast();
@@ -176,6 +185,19 @@ function AdminDashboard() {
         }
     };
 
+    // Inline ingredient name update (no modal needed for common edits)
+    const handleUpdateIngredient = async (pumpId, name) => {
+        if (!name || !name.trim()) return;
+        try {
+            await api.adminUpdate('pump', pumpId, 'ingredient_name', name.trim());
+            const res = await api.adminGetPumps();
+            setPumps(normalizePumps(res.pumps || {}));
+            showSuccess('Ingredient updated');
+        } catch (e) {
+            showError('Update failed: ' + e.message);
+        }
+    };
+
     const handleSaveRecipe = async (recipeData) => {
         try {
             // Use the unified save endpoint which correctly handles ingredients_json
@@ -261,51 +283,119 @@ function AdminDashboard() {
 
             <main className="container mx-auto p-4 md:p-6 pb-20 max-w-7xl space-y-10">
 
-                {/* Pump Configuration */}
+                {/* ── List 1: Available Drinks ── */}
                 <section>
-                    <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center justify-between mb-4">
                         <h3 className="text-xl font-bold text-slate-100 flex items-center gap-3">
-                            <span className="w-1.5 h-6 bg-pink-500 rounded-full shadow-[0_0_10px_rgba(236,72,153,0.5)]"></span>
-                            Pump Configuration
+                            <span className="w-1.5 h-6 bg-cyan-500 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.5)]"></span>
+                            Available Drinks
                         </h3>
                         <span className="text-xs font-bold px-3 py-1 bg-slate-800 text-slate-400 rounded-full border border-slate-700">
-                            {pumps.length} Pumps Installed
+                            {pumps.filter(p => p.is_active && p.ingredient_name && p.ingredient_name !== 'Empty').length} active
+                        </span>
+                    </div>
+                    <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
+                        <div className="flex flex-wrap gap-2">
+                            {pumps
+                                .filter(p => p.ingredient_name && p.ingredient_name !== 'Empty')
+                                .sort((a, b) => (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0))
+                                .map(pump => (
+                                    <div
+                                        key={pump.id}
+                                        title={`Pump ${pump.id}${pump.pin_number ? ` · GPIO ${pump.pin_number}` : ''}`}
+                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border transition-all
+                                            ${pump.is_active
+                                                ? 'bg-[#00E5FF]/10 text-[#00E5FF] border-[#00E5FF]/30 shadow-[0_0_8px_rgba(0,229,255,0.15)]'
+                                                : 'bg-slate-800 text-slate-500 border-slate-700 opacity-60'
+                                            }`}
+                                    >
+                                        <span className={`w-1.5 h-1.5 rounded-full ${pump.is_active ? 'bg-[#00E5FF]' : 'bg-slate-600'}`}></span>
+                                        {pump.ingredient_name}
+                                        <span className="text-[10px] opacity-60 font-normal">P{pump.id}</span>
+                                    </div>
+                                ))
+                            }
+                            {pumps.filter(p => p.ingredient_name && p.ingredient_name !== 'Empty').length === 0 && (
+                                <p className="text-slate-500 text-sm italic">No ingredients assigned yet — use Pump Assignment below.</p>
+                            )}
+                        </div>
+                    </div>
+                </section>
+
+                {/* ── List 2: Pump Assignment ── */}
+                <section>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-xl font-bold text-slate-100 flex items-center gap-3">
+                            <span className="w-1.5 h-6 bg-pink-500 rounded-full shadow-[0_0_10px_rgba(236,72,153,0.5)]"></span>
+                            Pump Assignment
+                        </h3>
+                        <span className="text-xs font-bold px-3 py-1 bg-slate-800 text-slate-400 rounded-full border border-slate-700">
+                            {pumps.length} Pumps
                         </span>
                     </div>
                     <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
                         {pumps.map(pump => (
                             <div
                                 key={pump.id}
-                                className="pump-row flex items-center justify-between px-6 py-4 border-b border-slate-800 
-                          last:border-b-0 hover:bg-slate-800/50 transition-all cursor-pointer group"
-                                onClick={() => setSelectedPump(pump)}
+                                className="flex items-center gap-3 px-4 py-3 border-b border-slate-800 last:border-b-0 hover:bg-slate-800/30 transition-all"
                             >
-                                <div className="flex items-center gap-4 flex-1 min-w-0">
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border
-                                  ${pump.is_active
-                                            ? 'bg-green-500/10 text-green-500 border-green-500/30'
-                                            : 'bg-slate-800 text-slate-500 border-slate-700'}`}>
-                                        {pump.id}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="font-semibold text-slate-200 truncate">
-                                            {pump.ingredient_name || 'Empty Pump'}
-                                        </p>
-                                    </div>
+                                {/* Pump number badge */}
+                                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border
+                                    ${pump.is_active
+                                        ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                                        : 'bg-slate-800 text-slate-500 border-slate-700'}`}>
+                                    {pump.id}
                                 </div>
-                                <label className="relative inline-flex items-center cursor-pointer" onClick={e => e.stopPropagation()}>
+
+                                {/* Ingredient selector */}
+                                <div className="flex-1 min-w-0">
+                                    <input
+                                        list={`ing-list-${pump.id}`}
+                                        defaultValue={pump.ingredient_name || ''}
+                                        onBlur={(e) => {
+                                            if (e.target.value !== pump.ingredient_name) {
+                                                handleUpdateIngredient(pump.id, e.target.value);
+                                            }
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') e.target.blur();
+                                        }}
+                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm
+                                            focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/50 transition-all"
+                                        placeholder="Select or type ingredient…"
+                                    />
+                                    <datalist id={`ing-list-${pump.id}`}>
+                                        {COMMON_INGREDIENTS.map(ing => (
+                                            <option key={ing} value={ing} />
+                                        ))}
+                                    </datalist>
+                                </div>
+
+                                {/* Active toggle */}
+                                <label className="relative inline-flex items-center cursor-pointer flex-shrink-0" onClick={e => e.stopPropagation()}>
                                     <input
                                         type="checkbox"
                                         checked={pump.is_active}
                                         onChange={(e) => handlePumpToggle(pump.id, e.target.checked)}
                                         className="sr-only peer"
                                     />
-                                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer 
-                                 peer-checked:after:translate-x-full peer-checked:after:border-white 
-                                 after:content-[''] after:absolute after:top-[2px] after:left-[2px] 
-                                 after:bg-white after:border-gray-300 after:border after:rounded-full 
-                                 after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                                    <div className="w-10 h-5 bg-slate-700 rounded-full peer
+                                        peer-checked:after:translate-x-full peer-checked:after:border-white
+                                        after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                                        after:bg-white after:border after:rounded-full
+                                        after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
                                 </label>
+
+                                {/* Edit / calibrate button */}
+                                <button
+                                    onClick={() => setSelectedPump(pump)}
+                                    title="Edit GPIO pin, calibrate"
+                                    className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg
+                                        bg-slate-800 border border-slate-700 text-slate-400
+                                        hover:bg-slate-700 hover:text-white transition-all text-sm"
+                                >
+                                    ⚙️
+                                </button>
                             </div>
                         ))}
                     </div>
