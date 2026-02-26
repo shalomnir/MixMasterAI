@@ -13,14 +13,6 @@ const CATEGORY_TABS = [
     { key: 'shot', label: 'Shots' },
 ];
 
-const SPIRIT_FILTERS = [
-    { key: 'all', label: 'All Spirits' },
-    { key: 'vodka', label: 'Vodka' },
-    { key: 'gin', label: 'Gin' },
-    { key: 'tequila', label: 'Tequila' },
-    { key: 'rum', label: 'Rum' },
-];
-
 function MenuPage() {
     const [recipes, setRecipes] = useState({ classic: [], highball: [], shot: [] });
     const [pumpData, setPumpData] = useState({});
@@ -88,21 +80,23 @@ function MenuPage() {
         }
     };
 
-    // Build a map from pump name → spirit keyword for filtering
-    const spiritPumpIds = useMemo(() => {
-        const map = {};
-        for (const filter of SPIRIT_FILTERS) {
-            if (filter.key === 'all') continue;
-            map[filter.key] = [];
+    // Build dynamic spirit filter list from active pumps
+    const spiritFilters = useMemo(() => {
+        const BASE_SPIRITS = ['vodka', 'gin', 'tequila', 'rum', 'whiskey', 'bourbon'];
+        const found = new Set();
+        for (const pump of Object.values(pumpData)) {
+            const name = (pump.name || pump.ingredient_name || '').toLowerCase();
+            for (const spirit of BASE_SPIRITS) {
+                if (name.includes(spirit)) found.add(spirit);
+            }
         }
-        for (const [id, pump] of Object.entries(pumpData)) {
-            const nameLower = (pump.name || pump.ingredient_name || '').toLowerCase();
-            if (nameLower.includes('vodka')) map.vodka?.push(id);
-            else if (nameLower.includes('gin')) map.gin?.push(id);
-            else if (nameLower.includes('tequila')) map.tequila?.push(id);
-            else if (nameLower.includes('rum')) map.rum?.push(id);
+        const filters = [{ key: 'all', label: 'All' }];
+        for (const spirit of BASE_SPIRITS) {
+            if (found.has(spirit)) {
+                filters.push({ key: spirit, label: spirit.charAt(0).toUpperCase() + spirit.slice(1) });
+            }
         }
-        return map;
+        return filters;
     }, [pumpData]);
 
     // Filtered cocktails based on category + spirit
@@ -114,21 +108,18 @@ function MenuPage() {
             pool = recipes[activeCategory] || [];
         }
 
-        // Apply spirit filter
+        // Apply spirit filter — match ingredient names in recipe
         if (activeSpirit !== 'all') {
-            const pumpIds = spiritPumpIds[activeSpirit] || [];
-            if (pumpIds.length > 0) {
-                pool = pool.filter(recipe => {
-                    const ings = recipe.ingredients || {};
-                    return pumpIds.some(id => ings[id] !== undefined && parseFloat(ings[id]) > 0);
-                });
-            } else {
-                pool = [];
-            }
+            pool = pool.filter(recipe => {
+                const ings = recipe.ingredients || {};
+                return Object.keys(ings).some(name =>
+                    name.toLowerCase().includes(activeSpirit)
+                );
+            });
         }
 
         return pool;
-    }, [recipes, activeCategory, activeSpirit, spiritPumpIds]);
+    }, [recipes, activeCategory, activeSpirit]);
 
     // Smooth filter switch with fade
     const switchCategory = (key) => {
@@ -227,7 +218,7 @@ function MenuPage() {
             {/* ─── Spirit Filter Bar ─── */}
             <div className="bg-black/60 backdrop-blur-sm border-b border-white/[0.03]">
                 <div className="flex gap-2 px-4 py-2 overflow-x-auto scrollbar-hide">
-                    {SPIRIT_FILTERS.map(filter => (
+                    {spiritFilters.map(filter => (
                         <button
                             key={filter.key}
                             onClick={() => switchSpirit(filter.key)}

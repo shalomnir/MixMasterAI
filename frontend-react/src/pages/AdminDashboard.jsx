@@ -167,7 +167,6 @@ function AdminDashboard() {
             }
             await api.adminUpdate('pump', pumpData.id, 'seconds_per_50ml', pumpData.seconds_per_50ml);
             await api.adminUpdate('pump', pumpData.id, 'is_alcohol', pumpData.is_alcohol);
-            await api.adminUpdate('pump', pumpData.id, 'is_virtual', pumpData.is_virtual);
             showSuccess('Pump saved');
             const res = await api.adminGetPumps();
             setPumps(normalizePumps(res.pumps || {}));
@@ -642,7 +641,6 @@ function PumpModal({ pump, onClose, onSave }) {
     const [pinNumber, setPinNumber] = useState(pump?.pin_number || '');
     const [secondsPer50ml, setSecondsPer50ml] = useState(pump?.seconds_per_50ml || 5);
     const [isAlcohol, setIsAlcohol] = useState(pump?.is_alcohol || false);
-    const [isVirtual, setIsVirtual] = useState(pump?.is_virtual || false);
     const [isSaving, setIsSaving] = useState(false);
 
     // Pump test state
@@ -663,7 +661,6 @@ function PumpModal({ pump, onClose, onSave }) {
             pin_number: pinNumber ? parseInt(pinNumber) : null,
             seconds_per_50ml: parseFloat(secondsPer50ml),
             is_alcohol: isAlcohol ? 1 : 0,
-            is_virtual: isVirtual ? 1 : 0
         });
         setIsSaving(false);
     };
@@ -773,15 +770,6 @@ function PumpModal({ pump, onClose, onSave }) {
                                     className="w-5 h-5 rounded"
                                 />
                                 <span className="text-white">Is Alcohol</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={isVirtual}
-                                    onChange={(e) => setIsVirtual(e.target.checked)}
-                                    className="w-5 h-5 rounded"
-                                />
-                                <span className="text-white">Virtual Pump</span>
                             </label>
                         </div>
 
@@ -959,20 +947,20 @@ function RecipeModal({ recipe, pumps, onClose, onSave, onDelete }) {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm text-slate-400 mb-2">Ingredients (ml per pump)</label>
+                            <label className="block text-sm text-slate-400 mb-2">Ingredients (ml per ingredient)</label>
                             <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                                {pumps.map(pump => (
+                                {pumps.filter(p => p.ingredient_name && p.ingredient_name !== 'Empty').map(pump => (
                                     <div key={pump.id} className="flex items-center gap-2">
                                         <input
                                             type="number"
                                             min="0"
-                                            value={ingredients[pump.id] || ''}
-                                            onChange={(e) => handleIngredientChange(pump.id, e.target.value)}
+                                            value={ingredients[pump.ingredient_name] || ''}
+                                            onChange={(e) => handleIngredientChange(pump.ingredient_name, e.target.value)}
                                             className="w-16 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white text-sm"
                                             placeholder="ml"
                                         />
                                         <span className="text-slate-300 text-sm truncate">
-                                            {pump.ingredient_name || `#${pump.id}`}
+                                            {pump.ingredient_name}
                                         </span>
                                     </div>
                                 ))}

@@ -343,10 +343,27 @@ def auth_me():
 
 @app.route('/api/recipes', methods=['GET'])
 def get_recipes():
-    """Get all recipes grouped by category."""
-    classic = Recipe.query.filter_by(category='classic').all()
-    highballs = Recipe.query.filter_by(category='highball').all()
-    shots = Recipe.query.filter_by(category='shot').all()
+    """Get all recipes grouped by category.
+    Only returns recipes whose every ingredient has an active pump.
+    """
+    # Build set of ingredient names currently loaded in active pumps
+    active_names = {
+        p.ingredient_name
+        for p in Pump.query.filter_by(is_active=True).all()
+        if p.ingredient_name and p.ingredient_name.strip()
+    }
+
+    def is_available(recipe):
+        """True when all recipe ingredients have an active pump."""
+        try:
+            ings = recipe.get_ingredients()
+        except Exception:
+            return False
+        return all(name in active_names for name in ings.keys())
+
+    classic  = [r for r in Recipe.query.filter_by(category='classic').all()  if is_available(r)]
+    highballs = [r for r in Recipe.query.filter_by(category='highball').all() if is_available(r)]
+    shots    = [r for r in Recipe.query.filter_by(category='shot').all()     if is_available(r)]
     machine_state = MachineState.get_instance()
 
     return jsonify({
@@ -469,25 +486,32 @@ def pour_cocktail(recipe_id):
         if original_total == 0:
             return jsonify({'status': 'error', 'message': 'Invalid recipe: Zero volume.'}), 400
 
-        # Scale ingredients
-        calculated = {}
-        for pump_id, orig_ml in ingredients.items():
-            calculated[pump_id] = (float(orig_ml) / original_total) * target_volume
+        # Resolve ingredient names → pumps; scale to target volume
+        # ingredients keys are now ingredient names (e.g. "Vodka")
+        name_to_pump = {
+            p.ingredient_name: p
+            for p in Pump.query.filter_by(is_active=True).all()
+            if p.ingredient_name
+        }
 
-        # Strong mode: 1.5x alcohol
+        calculated = {}  # pump_obj → scaled_ml
+        for ing_name, orig_ml in ingredients.items():
+            pump = name_to_pump.get(ing_name)
+            if not pump:
+                raise ValueError(f"No active pump found for ingredient: {ing_name}")
+            scaled_ml = (float(orig_ml) / original_total) * target_volume
+            calculated[pump] = scaled_ml
+
+        # Strong mode: 1.5x alcohol pumps
         if is_strong:
-            for pid in calculated:
-                pump = Pump.query.get(int(pid))
-                if pump and pump.is_alcohol:
-                    calculated[pid] *= 1.5
+            for pump in calculated:
+                if pump.is_alcohol:
+                    calculated[pump] *= 1.5
 
         # Pour (parallel threads)
         threads = []
         durations = []
-        for pump_id_str, ml_amount in calculated.items():
-            pump = Pump.query.get(int(pump_id_str))
-            if not pump:
-                continue
+        for pump, ml_amount in calculated.items():
             pin_number = pump.pin_number
             initialize_pump_pin(pin_number)
             duration = (ml_amount / 50.0) * pump.seconds_per_50ml
@@ -501,15 +525,13 @@ def pour_cocktail(recipe_id):
 
         total_duration = max(durations) if durations else 0
 
-        # Points
+        # Points (1 ml alcohol = 1 point)
         total_alcohol_ml = sum(
-            ml for pid, ml in calculated.items()
-            if db.session.get(Pump, int(pid)) and db.session.get(Pump, int(pid)).is_alcohol
+            ml for pump, ml in calculated.items() if pump.is_alcohol
         )
         points_earned = round(total_alcohol_ml)
-        
+
         # Strong mode gives 2x points as gamification incentive
-        # (Note: actual alcohol output only increases by 1.5x)
         if is_strong:
             points_earned = round(points_earned * 2)
         
@@ -770,8 +792,10 @@ def admin_update_entity():
                 return jsonify({'status': 'error', 'message': 'Pump not found'}), 404
             if field == 'pin_number':
                 value = int(value) if value else None
-            elif field in ('is_active', 'is_alcohol', 'is_virtual'):
+            elif field in ('is_active', 'is_alcohol'):
                 value = bool(int(value))
+            elif field == 'is_virtual':
+                return jsonify({'status': 'error', 'message': 'Virtual pump field removed'}), 400
             elif field == 'seconds_per_50ml':
                 value = float(value)
             if hasattr(pump, field):
