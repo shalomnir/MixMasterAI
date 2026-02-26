@@ -179,16 +179,8 @@ function AdminDashboard() {
 
     const handleSaveRecipe = async (recipeData) => {
         try {
-            if (recipeData.id) {
-                // Update existing recipe
-                await api.adminUpdate('recipe', recipeData.id, 'name', recipeData.name);
-                await api.adminUpdate('recipe', recipeData.id, 'description', recipeData.description);
-                await api.adminUpdate('recipe', recipeData.id, 'category', recipeData.category);
-                await api.adminUpdate('recipe', recipeData.id, 'ingredients_json', recipeData.ingredients_json);
-            } else {
-                // Create new recipe
-                await api.adminCreateRecipe(recipeData);
-            }
+            // Use the unified save endpoint which correctly handles ingredients_json
+            await api.adminSaveRecipe(recipeData);
             showSuccess('Recipe saved');
             const res = await api.adminGetRecipes();
             const recipesData = res.recipes || {};
@@ -915,7 +907,7 @@ function RecipeModal({ recipe, pumps, onClose, onSave, onDelete }) {
             name,
             description,
             category,
-            ingredients_json: JSON.stringify(ingredients)
+            ingredients // send as object; backend /api/admin/recipe/save expects ingredients, not ingredients_json
         });
         setIsSaving(false);
     };
