@@ -346,20 +346,20 @@ def get_recipes():
     """Get all recipes grouped by category.
     Only returns recipes whose every ingredient has an active pump.
     """
-    # Build set of ingredient names currently loaded in active pumps
+    # Build set of normalised ingredient names from active pumps
     active_names = {
-        p.ingredient_name
+        p.ingredient_name.strip().lower()
         for p in Pump.query.filter_by(is_active=True).all()
         if p.ingredient_name and p.ingredient_name.strip()
     }
 
     def is_available(recipe):
-        """True when all recipe ingredients have an active pump."""
+        """True when all recipe ingredients have an active pump (case-insensitive)."""
         try:
             ings = recipe.get_ingredients()
         except Exception:
             return False
-        return all(name in active_names for name in ings.keys())
+        return all(name.strip().lower() in active_names for name in ings.keys())
 
     classic  = [r for r in Recipe.query.filter_by(category='classic').all()  if is_available(r)]
     highballs = [r for r in Recipe.query.filter_by(category='highball').all() if is_available(r)]
