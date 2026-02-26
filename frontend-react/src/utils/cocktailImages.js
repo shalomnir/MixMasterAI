@@ -1,38 +1,45 @@
 /**
  * Shared image resolution for cocktail components.
- * Maps cocktail names → filenames on disk.
+ * Maps cocktail names → filenames on disk (under /assets/cocktails-imgs/).
+ *
+ * Available images:
+ *   Margarita.webp, Tommys-Margarita.webp, Cosmopolitan.webp, Gimlet.webp,
+ *   White-Lady.webp, Kamikaze.webp, Cranberry-Margarita.webp, Ocean-Breeze.webp,
+ *   Daiquiri.webp, Vodka-Sour.webp, Tquila-Sour.webp, Rum-Sour.webp,
+ *   Vodka-Soda-Lime.webp, Vodka-cran-soda.webp, Gin-Rickey.webp,
+ *   Tequila-highball.webp, Rum-Soda.webp, Gin-Cran-Soda.webp,
+ *   Pink_Spritz.webp, Citrus-Gin-Fizz.webp, shots.webp, placeholder.png
  */
 
 export const PLACEHOLDER_IMG = '/assets/cocktails-imgs/placeholder.png';
 const IMG_BASE = '/assets/cocktails-imgs/';
 
 const IMAGE_MAP = {
-    'Margarita': 'Margarita.webp',
-    "Tommy's Margarita": 'Tommys-Margarita.webp',
-    'Daiquiri': 'Daiquiri.webp',
-    'Gimlet': 'Gimlet.webp',
-    'Vodka Sour': 'Vodka-Sour.webp',
-    'Tequila Sour': 'Tquila-Sour.webp',
-    'Rum Sour': 'Rum-Sour.webp',
-    'White Lady': 'White-Lady.webp',
-    'Kamikaze': 'Kamikaze.webp',
+    // ── Classics ──────────────────────────────────────────────────
+    'Classic Margarita': 'Margarita.webp',
     'Cosmopolitan': 'Cosmopolitan.webp',
-    'Cranberry Margarita': 'Cranberry-Margarita.webp',
-    'Ocean Breeze': 'Ocean-Breeze.webp',
-    'Vodka Soda Lime': 'Vodka-Soda-Lime.webp',
-    'Gin Rickey': 'Gin-Rickey.webp',
-    'Tequila Highball': 'Tequila-highball.webp',
-    'Rum Soda': 'Rum-Soda.webp',
-    'Vodka Cran Soda': 'Vodka-cran-soda.webp',
-    'Gin Cran Soda': 'Gin-Cran-Soda.webp',
-    'Pink Spritz': 'Pink_Spritz.webp',
-    'Citrus Gin Fizz': 'Citrus-Gin-Fizz.webp',
-    'Vodka Shot': 'shots.webp',
-    'Tequila Shot': 'shots.webp',
-    'White Rum Shot': 'shots.webp',
-    'Gin Shot': 'shots.webp',
-    'Rum Cran Soda': 'Gin-Cran-Soda.webp',
-    'Tequila Cran Soda': 'Gin-Cran-Soda.webp',
+    'Gimlet': 'Gimlet.webp',
+    'Pineapple Margarita': 'Tommys-Margarita.webp',   // tropical margarita variant
+    'Lemon Drop Martini': 'Vodka-Sour.webp',          // citrus vodka martini → sour-style glass
+    'Bay Breeze': 'Ocean-Breeze.webp',        // fruity build-over-ice drink
+    'White Lady': 'White-Lady.webp',
+    'Tequila Sunrise (Machine Style)': 'Tquila-Sour.webp',      // tequila-forward warm-hued glass
+
+    // ── Highballs ─────────────────────────────────────────────────
+    'Gin Fizz': 'Citrus-Gin-Fizz.webp',
+    'Tom Collins': 'Gin-Rickey.webp',          // tall gin-lime-soda classic
+    'Vodka Collins': 'Vodka-Soda-Lime.webp',     // vodka + lime + soda tall
+    'Tequila Collins': 'Tequila-highball.webp',    // tall tequila drink
+    'Tropical Gin Juice': 'Gin-Rickey.webp',          // gin + pineapple + soda
+    'Cranberry Gin Fizz': 'Gin-Cran-Soda.webp',       // gin + cranberry + soda = pink fizz
+    'Pineapple Express': 'Vodka-cran-soda.webp',     // vodka + pineapple tall
+    'Holiday Highball': 'Pink_Spritz.webp',         // tequila + cranberry + soda festive
+
+    // ── Shots ─────────────────────────────────────────────────────
+    'Kamikaze Shot': 'Kamikaze.webp',
+    'Mexican Lemonade Shot': 'shots.webp',
+    'Pink Gin Shot': 'shots.webp',
+    'Pineapple Upside Down': 'shots.webp',
 };
 
 export function resolveImage(recipe) {
