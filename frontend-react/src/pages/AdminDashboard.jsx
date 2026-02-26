@@ -32,6 +32,7 @@ function AdminDashboard() {
     const [selectedPump, setSelectedPump] = useState(null);
     const [selectedRecipe, setSelectedRecipe] = useState(null);
     const [selectedUser, setSelectedUser] = useState(null);
+    const [editingPump, setEditingPump] = useState(null); // for drink picker
     const [newEventName, setNewEventName] = useState('');
 
     useEffect(() => {
@@ -283,119 +284,80 @@ function AdminDashboard() {
 
             <main className="container mx-auto p-4 md:p-6 pb-20 max-w-7xl space-y-10">
 
-                {/* ── List 1: Available Drinks ── */}
-                <section>
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-xl font-bold text-slate-100 flex items-center gap-3">
-                            <span className="w-1.5 h-6 bg-cyan-500 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.5)]"></span>
-                            Available Drinks
-                        </h3>
-                        <span className="text-xs font-bold px-3 py-1 bg-slate-800 text-slate-400 rounded-full border border-slate-700">
-                            {pumps.filter(p => p.is_active && p.ingredient_name && p.ingredient_name !== 'Empty').length} active
-                        </span>
-                    </div>
-                    <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
-                        <div className="flex flex-wrap gap-2">
-                            {pumps
-                                .filter(p => p.ingredient_name && p.ingredient_name !== 'Empty')
-                                .sort((a, b) => (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0))
-                                .map(pump => (
-                                    <div
-                                        key={pump.id}
-                                        title={`Pump ${pump.id}${pump.pin_number ? ` · GPIO ${pump.pin_number}` : ''}`}
-                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border transition-all
-                                            ${pump.is_active
-                                                ? 'bg-[#00E5FF]/10 text-[#00E5FF] border-[#00E5FF]/30 shadow-[0_0_8px_rgba(0,229,255,0.15)]'
-                                                : 'bg-slate-800 text-slate-500 border-slate-700 opacity-60'
-                                            }`}
-                                    >
-                                        <span className={`w-1.5 h-1.5 rounded-full ${pump.is_active ? 'bg-[#00E5FF]' : 'bg-slate-600'}`}></span>
-                                        {pump.ingredient_name}
-                                        <span className="text-[10px] opacity-60 font-normal">P{pump.id}</span>
-                                    </div>
-                                ))
-                            }
-                            {pumps.filter(p => p.ingredient_name && p.ingredient_name !== 'Empty').length === 0 && (
-                                <p className="text-slate-500 text-sm italic">No ingredients assigned yet — use Pump Assignment below.</p>
-                            )}
-                        </div>
-                    </div>
-                </section>
-
-                {/* ── List 2: Pump Assignment ── */}
+                {/* ── Pump Setup ── */}
                 <section>
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-xl font-bold text-slate-100 flex items-center gap-3">
                             <span className="w-1.5 h-6 bg-pink-500 rounded-full shadow-[0_0_10px_rgba(236,72,153,0.5)]"></span>
-                            Pump Assignment
+                            Pump Setup
                         </h3>
                         <span className="text-xs font-bold px-3 py-1 bg-slate-800 text-slate-400 rounded-full border border-slate-700">
-                            {pumps.length} Pumps
+                            {pumps.filter(p => p.is_active && p.ingredient_name && p.ingredient_name !== 'Empty').length} / {pumps.length} active
                         </span>
                     </div>
-                    <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {pumps.map(pump => (
                             <div
                                 key={pump.id}
-                                className="flex items-center gap-3 px-4 py-3 border-b border-slate-800 last:border-b-0 hover:bg-slate-800/30 transition-all"
-                            >
-                                {/* Pump number badge */}
-                                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border
+                                className={`rounded-2xl border p-4 flex flex-col gap-3 transition-all
                                     ${pump.is_active
-                                        ? 'bg-green-500/10 text-green-400 border-green-500/30'
-                                        : 'bg-slate-800 text-slate-500 border-slate-700'}`}>
-                                    {pump.id}
+                                        ? 'bg-slate-900 border-slate-700 hover:border-slate-600'
+                                        : 'bg-slate-950 border-slate-800 opacity-60'
+                                    }`}
+                            >
+                                {/* Header: pump number + gear */}
+                                <div className="flex items-center justify-between">
+                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full
+                                        ${pump.is_active
+                                            ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                            : 'bg-slate-800 text-slate-500 border border-slate-700'
+                                        }`}>
+                                        P{pump.id}
+                                    </span>
+                                    <button
+                                        onClick={() => setSelectedPump(pump)}
+                                        title="GPIO & Calibration"
+                                        className="text-slate-600 hover:text-slate-300 transition-colors text-base leading-none"
+                                    >
+                                        ⚙
+                                    </button>
                                 </div>
 
-                                {/* Ingredient selector */}
-                                <div className="flex-1 min-w-0">
-                                    <input
-                                        list={`ing-list-${pump.id}`}
-                                        defaultValue={pump.ingredient_name || ''}
-                                        onBlur={(e) => {
-                                            if (e.target.value !== pump.ingredient_name) {
-                                                handleUpdateIngredient(pump.id, e.target.value);
-                                            }
-                                        }}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') e.target.blur();
-                                        }}
-                                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm
-                                            focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/50 transition-all"
-                                        placeholder="Select or type ingredient…"
-                                    />
-                                    <datalist id={`ing-list-${pump.id}`}>
-                                        {COMMON_INGREDIENTS.map(ing => (
-                                            <option key={ing} value={ing} />
-                                        ))}
-                                    </datalist>
-                                </div>
-
-                                {/* Active toggle */}
-                                <label className="relative inline-flex items-center cursor-pointer flex-shrink-0" onClick={e => e.stopPropagation()}>
-                                    <input
-                                        type="checkbox"
-                                        checked={pump.is_active}
-                                        onChange={(e) => handlePumpToggle(pump.id, e.target.checked)}
-                                        className="sr-only peer"
-                                    />
-                                    <div className="w-10 h-5 bg-slate-700 rounded-full peer
-                                        peer-checked:after:translate-x-full peer-checked:after:border-white
-                                        after:content-[''] after:absolute after:top-[2px] after:left-[2px]
-                                        after:bg-white after:border after:rounded-full
-                                        after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
-                                </label>
-
-                                {/* Edit / calibrate button */}
+                                {/* Drink name — big tap target */}
                                 <button
-                                    onClick={() => setSelectedPump(pump)}
-                                    title="Edit GPIO pin, calibrate"
-                                    className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg
-                                        bg-slate-800 border border-slate-700 text-slate-400
-                                        hover:bg-slate-700 hover:text-white transition-all text-sm"
+                                    onClick={() => setEditingPump(pump)}
+                                    className="text-left flex-1"
                                 >
-                                    ⚙️
+                                    <p className={`font-bold text-lg leading-tight truncate
+                                        ${pump.is_active ? 'text-white' : 'text-slate-500'}`}>
+                                        {pump.ingredient_name && pump.ingredient_name !== 'Empty'
+                                            ? pump.ingredient_name
+                                            : <span className="text-slate-600 italic">Not set</span>
+                                        }
+                                    </p>
+                                    <p className="text-[11px] text-slate-500 mt-0.5">Tap to change →</p>
                                 </button>
+
+                                {/* Active / Empty toggle */}
+                                <div className="flex items-center justify-between">
+                                    <span className={`text-xs font-bold ${pump.is_active ? 'text-green-400' : 'text-red-400'
+                                        }`}>
+                                        {pump.is_active ? '● Active' : '○ Empty'}
+                                    </span>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={pump.is_active}
+                                            onChange={(e) => handlePumpToggle(pump.id, e.target.checked)}
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-9 h-5 bg-slate-700 rounded-full peer
+                                            peer-checked:after:translate-x-full peer-checked:after:border-white
+                                            after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                                            after:bg-white after:border after:rounded-full
+                                            after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+                                    </label>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -646,12 +608,24 @@ function AdminDashboard() {
                 </section>
             </main>
 
-            {/* Pump Edit Modal */}
+            {/* Pump Edit Modal (GPIO & calibration) */}
             {selectedPump && (
                 <PumpModal
                     pump={selectedPump}
                     onClose={() => setSelectedPump(null)}
                     onSave={handleSavePump}
+                />
+            )}
+
+            {/* Drink Picker Modal */}
+            {editingPump && (
+                <DrinkPickerModal
+                    pump={editingPump}
+                    onClose={() => setEditingPump(null)}
+                    onSelect={(drinkName) => {
+                        handleUpdateIngredient(editingPump.id, drinkName);
+                        setEditingPump(null);
+                    }}
                 />
             )}
 
@@ -1089,3 +1063,64 @@ function RecipeModal({ recipe, pumps, onClose, onSave, onDelete }) {
 }
 
 export default AdminDashboard;
+
+// ─────────────────────────────────────────────────────────
+// Drink Picker Modal — shown when tapping a pump card
+// ─────────────────────────────────────────────────────────
+function DrinkPickerModal({ pump, onClose, onSelect }) {
+    const [customDrink, setCustomDrink] = useState('');
+
+    return (
+        <div className="fixed inset-0 z-[200]">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose}></div>
+            <div className="absolute bottom-0 left-0 right-0 flex justify-center p-4">
+                <div className="bg-slate-900 rounded-2xl border border-slate-700 p-5 w-full max-w-md">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold text-white">
+                            Pump {pump.id} — Change Drink
+                        </h3>
+                        <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors text-xl leading-none">&times;</button>
+                    </div>
+
+                    {/* Drink grid */}
+                    <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto mb-4">
+                        {COMMON_INGREDIENTS.map(ing => (
+                            <button
+                                key={ing}
+                                onClick={() => onSelect(ing)}
+                                className={`px-4 py-3 rounded-xl text-sm font-semibold text-left border transition-all
+                                    ${pump.ingredient_name === ing
+                                        ? 'bg-pink-500/20 border-pink-500/50 text-pink-300 shadow-[0_0_10px_rgba(236,72,153,0.2)]'
+                                        : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:border-slate-600 hover:text-white'
+                                    }`}
+                            >
+                                {ing}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Custom drink input */}
+                    <div className="flex gap-2 border-t border-slate-800 pt-4">
+                        <input
+                            type="text"
+                            value={customDrink}
+                            onChange={e => setCustomDrink(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && customDrink.trim()) onSelect(customDrink.trim()); }}
+                            placeholder="Custom drink name…"
+                            className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm
+                                focus:outline-none focus:border-pink-500 transition-all"
+                        />
+                        <button
+                            disabled={!customDrink.trim()}
+                            onClick={() => onSelect(customDrink.trim())}
+                            className="px-4 py-2 bg-pink-600 hover:bg-pink-500 disabled:opacity-40 rounded-lg text-white text-sm font-bold transition-all"
+                        >
+                            Set
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
