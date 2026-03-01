@@ -865,8 +865,8 @@ def admin_save_recipe():
 
         # Auto-calculate points
         points_reward = 0
-        for pid, ml in ingredients.items():
-            pump = Pump.query.get(int(pid))
+        for ing_name, ml in ingredients.items():
+            pump = Pump.query.filter_by(ingredient_name=ing_name).first()
             if pump and pump.is_alcohol:
                 points_reward += float(ml)
         points_reward = round(points_reward)

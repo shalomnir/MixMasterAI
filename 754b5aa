@@ -1,0 +1,67 @@
+[33m8998dbc[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m fix: get_recipes correctly matches ingredient keys to pump IDs
+[33mcc04b82[m fix: get_recipes correctly matches ingredient keys to pump IDs
+[33ma642dd8[m fixs
+[33m0f871b4[m fix: exclude node_modules from frontend Docker build
+[33m4993680[m feat: add frontend Dockerfile for Railway
+[33m58974b0[m fix: remove EXPOSE 5000, Railway routes via PORT env var
+[33m060e5d6[m fix: add .dockerignore, use flask dev server for diagnosis
+[33m323197b[m fix: bind gunicorn to IPv6 wildcard [::]
+[33m792d3d1[m fix: gunicorn 1 worker, 120s timeout, debug log level
+[33md6e3295[m fix: add Supabase SSL and connection pool settings
+[33m1fa4f5e[m fix: catch DB init errors in before_request
+[33m05b2cd1[m fix: use sh -c to expand \ for gunicorn
+[33m5c584b5[m fix: bind gunicorn to \ for Railway
+[33m80beb02[m fix: move Dockerfile to root for Railway build context
+[33m4dc00fb[m fix: set docker build context to backend/
+[33me6e508f[m fix: railway.toml restartPolicyType uppercase
+[33m04e01f9[m feat: cloud-first architecture - job queue, Pi worker, PostgreSQL support
+[33m7c13d69[m new arichetecture
+[33m754b5aa[m Fix spirit filter, case-insensitive pump matching
+[33m882748b[m Spirit filter: use active alcohol pump names; exact match
+[33ma97cbf1[m Fix ingredient display, spirit filter sync, get_pumps is_active
+[33mc9b1d88[m Pump Setup: card grid + drink picker bottom-sheet
+[33m43bfa55[m Ingredient-based recipes, active pump filtering, admin dual-list UI
+[33m4ff8af9[m Replace recipes with new menu (20 drinks) + update image map
+[33m992bed4[m recepie saving
+[33m6ee4728[m recepie saving
+[33m4166f03[m recepie saving
+[33m0ee8f4a[m magic link
+[33md4b5963[m magic link
+[33m8e3c19c[m magic link
+[33m0943ebe[m magic link
+[33m5311d1a[m magic link
+[33me8054be[m magic link
+[33ma9b8a9b[m magic link
+[33m3a55eab[m imgs uploads
+[33m9c1e209[m imgs uploads
+[33mf7362ec[m imgs uploads
+[33mc1e5cb0[m imgs uploads
+[33md2f7c4a[m imgs uploads
+[33m2738ab9[m imgs uploads
+[33m3d94ba9[m imgs uploads
+[33m6d4493b[m power off fix
+[33m24cd7e8[m power off
+[33m0c38dcb[m stats fong and power off
+[33m2b4e89f[m profile redirect
+[33m2fda75d[m react changes fix
+[33m10b28bd[m react changes fix
+[33maa81ba6[m react changes
+[33m45c40b9[m react changes
+[33m0b63512[m gpio perms fix
+[33m5c13a79[m requirements fix
+[33mfcad3d5[m back and front bugs fix
+[33me482566[m Refactor: Decouple backend as pure JSON API with JWT auth
+[33mdcbf879[m Fix bugs files
+[33mf7ad83d[m Fix: Dashboard API calls using proper Auth and endpoints
+[33m944c042[m Fix admin dashboard
+[33m585e15a[m Fix: Sync app.py to backend and mount volume for dev
+[33m0c89612[m Fix: Session-based admin bypass and hardware access
+[33m2240ee9[m feat(admin): Restore Dashboard, Enable CORS, Fix API URLs
+[33mbebed7c[m Fix: GPIO access and UI regressions
+[33me017775[m Fix API base URL to point to api.mixmasterai.app
+[33m876e55c[m domain conf fix
+[33mac9398f[m domain conf
+[33m69ed27c[m back and front
+[33mafe7923[m Fix: Inverted pump logic to Active-Low and updated GPIO setup
+[33m52aa88e[m Fix: Inverted pump logic to Active-Low and updated GPIO setup
+[33m08e48b5[m First version with Docker and GPIO support

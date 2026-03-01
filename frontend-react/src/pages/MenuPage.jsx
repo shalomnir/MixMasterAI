@@ -83,10 +83,12 @@ function MenuPage() {
     // Build spirit filters from pumps marked as alcohol + active
     const spiritFilters = useMemo(() => {
         const filters = [{ key: 'all', label: 'All' }];
+        const added = new Set();
         for (const pump of Object.values(pumpData)) {
             const name = pump.name || pump.ingredient_name || '';
-            if (pump.is_active && pump.is_alcohol && name) {
+            if (pump.is_active && pump.is_alcohol && name && !added.has(name)) {
                 filters.push({ key: name, label: name });
+                added.add(name);
             }
         }
         return filters;

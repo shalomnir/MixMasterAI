@@ -157,6 +157,17 @@ function PouringStatus() {
                         </p>
                     </div>
 
+                    {/* Highball Instruction */}
+                    {currentDrink?.category === 'highball' && (
+                        <div className="mb-6 bg-[#00E5FF]/10 border border-[#00E5FF]/40 rounded-2xl p-4 text-[#00E5FF] shadow-lg shadow-[#00E5FF]/10 flex items-center gap-4 text-left">
+                            <span className="text-4xl">🧊</span>
+                            <p className="text-sm font-medium leading-relaxed">
+                                <strong className="block text-base mb-0.5 text-white">Base Poured!</strong>
+                                Top up with soda or tonic to finish your highball.
+                            </p>
+                        </div>
+                    )}
+
                     {/* Points Earned */}
                     <div className="mb-5">
                         <div className="inline-flex items-center gap-3 bg-white/[0.03] backdrop-blur-md 

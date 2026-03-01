@@ -184,13 +184,7 @@ const CATEGORY_TABS = [
     { key: 'shot', label: 'Shots' },
 ];
 
-const SPIRIT_FILTERS = [
-    { key: 'all', label: 'All Spirits' },
-    { key: 'vodka', label: 'Vodka' },
-    { key: 'gin', label: 'Gin' },
-    { key: 'tequila', label: 'Tequila' },
-    { key: 'rum', label: 'Rum' },
-];
+// Removed static SPIRIT_FILTERS
 
 function MenuView({ user }) {
     const [recipes, setRecipes] = useState({ classic: [], highball: [], shot: [] });
@@ -247,16 +241,17 @@ function MenuView({ user }) {
         }
     };
 
-    const spiritPumpIds = useMemo(() => {
-        const map = { vodka: [], gin: [], tequila: [], rum: [] };
-        for (const [id, pump] of Object.entries(pumpData)) {
-            const n = (pump.ingredient_name || '').toLowerCase();
-            if (n.includes('vodka')) map.vodka.push(id);
-            else if (n.includes('gin')) map.gin.push(id);
-            else if (n.includes('tequila')) map.tequila.push(id);
-            else if (n.includes('rum')) map.rum.push(id);
+    const spiritFilters = useMemo(() => {
+        const filters = [{ key: 'all', label: 'All Spirits' }];
+        const added = new Set();
+        for (const pump of Object.values(pumpData)) {
+            const name = pump.name || pump.ingredient_name || '';
+            if (pump.is_active && pump.is_alcohol && name && !added.has(name)) {
+                filters.push({ key: name, label: name });
+                added.add(name);
+            }
         }
-        return map;
+        return filters;
     }, [pumpData]);
 
     const filteredRecipes = useMemo(() => {
@@ -264,13 +259,15 @@ function MenuView({ user }) {
             ? [...recipes.classic, ...recipes.highball, ...recipes.shot]
             : (recipes[activeCategory] || []);
         if (activeSpirit !== 'all') {
-            const ids = spiritPumpIds[activeSpirit] || [];
-            pool = ids.length
-                ? pool.filter(r => ids.some(id => (r.ingredients || {})[id] > 0))
-                : [];
+            pool = pool.filter(recipe => {
+                const ings = recipe.ingredients || {};
+                return Object.keys(ings).some(name =>
+                    name.toLowerCase() === activeSpirit.toLowerCase()
+                );
+            });
         }
         return pool;
-    }, [recipes, activeCategory, activeSpirit, spiritPumpIds]);
+    }, [recipes, activeCategory, activeSpirit]);
 
     const switchCategory = (key) => {
         if (key === activeCategory) return;
@@ -337,7 +334,7 @@ function MenuView({ user }) {
             {/* Spirit filter */}
             <div className="bg-black/60 backdrop-blur-sm border-b border-white/[0.03]">
                 <div className="flex gap-2 px-4 py-2 overflow-x-auto scrollbar-hide">
-                    {SPIRIT_FILTERS.map(filter => (
+                    {spiritFilters.map(filter => (
                         <button key={filter.key} onClick={() => switchSpirit(filter.key)}
                             className={`flex-shrink-0 px-4 py-1.5 rounded-full text-xs font-medium
                                 transition-all duration-200 touch-manipulation whitespace-nowrap
