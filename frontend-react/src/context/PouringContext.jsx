@@ -1,4 +1,4 @@
-import { createContext, useState, useCallback } from 'react';
+import { createContext, useState, useCallback, useEffect } from 'react';
 import api from '../services/api';
 
 export const PouringContext = createContext(null);
@@ -11,6 +11,28 @@ export function PouringProvider({ children }) {
     const [estimatedDuration, setEstimatedDuration] = useState(0);
     const [errorMessage, setErrorMessage] = useState(null);
     const [pointsEarned, setPointsEarned] = useState(0);
+    const [isGlobalBusy, setIsGlobalBusy] = useState(false);
+
+    // Poll global machine status to lock buttons for all users
+    useEffect(() => {
+        let isMounted = true;
+        const checkStatus = async () => {
+            try {
+                const res = await api.getStatus();
+                if (isMounted) {
+                    setIsGlobalBusy(res.is_pouring);
+                }
+            } catch (err) { }
+        };
+
+        checkStatus();
+        const intervalId = setInterval(checkStatus, 2000); // Poll every 2 seconds
+
+        return () => {
+            isMounted = false;
+            clearInterval(intervalId);
+        };
+    }, []);
 
     const startPour = useCallback(async (recipe, options, pumpData, machineState) => {
         setIsPouring(true);
@@ -43,36 +65,39 @@ export function PouringProvider({ children }) {
         const estimatedSeconds = Math.ceil(maxDuration);
         setEstimatedDuration(estimatedSeconds);
 
-        // Start progress animation
-        let elapsed = 0;
-        const intervalId = setInterval(() => {
-            elapsed += 0.1;
-            const progress = Math.min((elapsed / estimatedSeconds) * 100, 100);
-            setPouringProgress(progress);
-
-            if (elapsed >= estimatedSeconds) {
-                clearInterval(intervalId);
-            }
-        }, 100);
-
         try {
+            // Set status to loading_server to trigger spinner UI without timer
+            setPouringStatus('loading_server');
+
             const response = await api.pourCocktail(recipe.id, {
                 isStrong: isStrong,
                 isTaste: isTaste
             });
 
-            clearInterval(intervalId);
-            setPouringProgress(100);
+            // Pour has begun on the server, start the timer UI
+            setPouringStatus('pouring');
 
-            if (response.status === 'success') {
-                setPouringStatus('success');
-                setPointsEarned(response.points_added || 0);
-                return { success: true, response };
-            } else {
-                throw new Error(response.message || 'Unknown error');
-            }
+            // Start progress animation
+            let elapsed = 0;
+            const intervalId = setInterval(() => {
+                elapsed += 0.1;
+                const progress = Math.min((elapsed / estimatedSeconds) * 100, 100);
+                setPouringProgress(progress);
+
+                if (elapsed >= estimatedSeconds) {
+                    clearInterval(intervalId);
+                    if (response.status === 'success') {
+                        setPouringStatus('success');
+                        setPointsEarned(response.points_added || 0);
+                    } else {
+                        setPouringStatus('error');
+                        setErrorMessage(response.message || 'Unknown error');
+                    }
+                }
+            }, 100);
+
+            return { success: response.status === 'success', response };
         } catch (error) {
-            clearInterval(intervalId);
             setPouringStatus('error');
             setErrorMessage(error.message);
             return { success: false, error };
@@ -97,6 +122,7 @@ export function PouringProvider({ children }) {
         estimatedDuration,
         errorMessage,
         pointsEarned,
+        isGlobalBusy,
         startPour,
         resetPour
     };

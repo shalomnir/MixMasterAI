@@ -24,7 +24,7 @@ function PouringStatus() {
         if (pouringStatus === 'success') {
             loadLeaderboardPosition();
             setIsVisible(true);
-        } else if (pouringStatus === 'pouring') {
+        } else if (pouringStatus === 'pouring' || pouringStatus === 'loading_server') {
             setIsVisible(true);
             setLeaderboardData(null);
         } else {
@@ -99,6 +99,15 @@ function PouringStatus() {
     return (
         <div className={`fixed inset-0 bg-black/95 backdrop-blur-sm z-[300] flex flex-col items-center justify-center text-center p-6
             transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+
+            {/* ─── Loading Server State ─── */}
+            {pouringStatus === 'loading_server' && (
+                <div className="text-center max-w-sm mx-auto">
+                    <h2 className="text-3xl font-bold text-white mb-2">Preparing...</h2>
+                    <p className="text-gray-500 mb-8">Connecting to MixMasterAI</p>
+                    <div className="spinner mx-auto" style={{ width: '48px', height: '48px' }} />
+                </div>
+            )}
 
             {/* ─── Pouring State ─── */}
             {pouringStatus === 'pouring' && (

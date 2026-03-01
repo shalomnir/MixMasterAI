@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { resolveImage, PLACEHOLDER_IMG } from '../utils/cocktailImages';
+import { usePour } from '../hooks/usePour';
 
 function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
+    const { isGlobalBusy } = usePour();
     const [isStrong, setIsStrong] = useState(false);
     const [isTaste, setIsTaste] = useState(false);
     const [isVisible, setIsVisible] = useState(false);
@@ -112,6 +114,14 @@ function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
                 gradient: 'from-cyan-600/60 to-cyan-500/60',
                 glow: 'shadow-cyan-500/20',
                 textColor: 'text-cyan-100',
+            };
+        }
+        if (isGlobalBusy) {
+            return {
+                text: 'Machine Busy',
+                gradient: 'from-gray-600 to-gray-500',
+                glow: 'shadow-gray-900',
+                textColor: 'text-gray-300',
             };
         }
         return {
@@ -246,11 +256,12 @@ function DrinkModal({ recipe, pumpData, machineState, onClose, onPour }) {
                     style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}
                 >
                     <button
+                        disabled={isGlobalBusy}
                         onClick={handlePour}
                         className={`w-full py-4 rounded-2xl font-bold text-base uppercase tracking-wider
                              bg-gradient-to-r ${btnCfg.gradient} ${btnCfg.textColor}
                              shadow-lg ${btnCfg.glow}
-                             hover:brightness-110 active:scale-95
+                             ${isGlobalBusy ? 'opacity-80 cursor-not-allowed' : 'hover:brightness-110 active:scale-95'}
                              transition-all duration-200 touch-manipulation`}
                     >
                         {btnCfg.text}

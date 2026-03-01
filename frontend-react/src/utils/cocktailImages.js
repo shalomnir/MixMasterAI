@@ -36,6 +36,7 @@ const IMAGE_MAP = {
     'Holiday Highball': 'Pink_Spritz.webp',         // tequila + cranberry + soda festive
 
     // ── Shots ─────────────────────────────────────────────────────
+    'Kamikaze': 'Kamikaze.webp',
     'Kamikaze Shot': 'Kamikaze.webp',
     'Mexican Lemonade Shot': 'shots.webp',
     'Pink Gin Shot': 'shots.webp',

