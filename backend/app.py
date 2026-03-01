@@ -861,11 +861,21 @@ def admin_save_recipe():
         return jsonify({'status': 'error', 'message': 'Invalid category'}), 400
 
     try:
-        ingredients_json = json.dumps({str(k): float(v) for k, v in ingredients.items() if float(v) > 0})
+        # Filter ingredients properly, converting values to float
+        clean_ings = {}
+        for k, v in ingredients.items():
+            try:
+                val = float(v)
+                if val > 0:
+                    clean_ings[str(k)] = val
+            except (ValueError, TypeError):
+                continue
+                
+        ingredients_json = json.dumps(clean_ings)
 
         # Auto-calculate points
         points_reward = 0
-        for ing_name, ml in ingredients.items():
+        for ing_name, ml in clean_ings.items():
             pump = Pump.query.filter_by(ingredient_name=ing_name).first()
             if pump and pump.is_alcohol:
                 points_reward += float(ml)
