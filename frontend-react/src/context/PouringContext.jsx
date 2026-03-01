@@ -51,22 +51,35 @@ export function PouringProvider({ children }) {
             (sum, ml) => sum + parseFloat(ml), 0
         );
 
+        // Build a robust map of ingredient names to pump info
+        const nameToPump = {};
+        for (const pump of Object.values(pumpData)) {
+            const name = pump.name || pump.ingredient_name || '';
+            if (name) nameToPump[name.toLowerCase()] = pump;
+        }
+
         let maxDuration = 0;
-        for (const [key, ml] of Object.entries(recipe.ingredients || {})) {
-            // The key could be an old numeric ID or the new ingredient_name string format
-            const pump = pumpData[key] || Object.values(pumpData).find(
-                p => (p.ingredient_name || '').toLowerCase() === String(key).toLowerCase()
-            );
+        console.log('Calculating duration for ingredients:', recipe.ingredients);
+        for (const [ingredientName, ml] of Object.entries(recipe.ingredients || {})) {
+            // Check numeric ID fallback or direct name lookup
+            let pump = pumpData[ingredientName];
+            if (!pump) {
+                pump = nameToPump[String(ingredientName).trim().toLowerCase()];
+            }
+
+            console.log('Found pump for ingredient:', ingredientName, pump);
 
             if (pump && pump.seconds_per_50ml) {
                 let scaledMl = (parseFloat(ml) / originalTotal) * targetVol;
                 if (isStrong && pump.is_alcohol) scaledMl *= 1.5;
-                const duration = (scaledMl / 50.0) * pump.seconds_per_50ml;
+                const duration = (scaledMl / 50.0) * parseFloat(pump.seconds_per_50ml);
+                console.log(`Pump ${pump.ingredient_name} duration:`, duration);
                 maxDuration = Math.max(maxDuration, duration);
             }
         }
 
         const estimatedSeconds = Math.ceil(maxDuration);
+        console.log('Estimated total seconds:', estimatedSeconds);
         setEstimatedDuration(estimatedSeconds);
 
         try {
@@ -78,6 +91,13 @@ export function PouringProvider({ children }) {
                 isTaste: isTaste
             });
 
+            // Fallback: If frontend miscalculated 0, use the backend's exact calculation
+            const actualSeconds = estimatedSeconds > 0
+                ? estimatedSeconds
+                : Math.ceil(response.total_duration || 5);
+
+            setEstimatedDuration(actualSeconds);
+
             // Pour has begun on the server, start the timer UI
             setPouringStatus('pouring');
 
@@ -85,10 +105,10 @@ export function PouringProvider({ children }) {
             let elapsed = 0;
             const intervalId = setInterval(() => {
                 elapsed += 0.1;
-                const progress = Math.min((elapsed / estimatedSeconds) * 100, 100);
+                const progress = Math.min((elapsed / actualSeconds) * 100, 100);
                 setPouringProgress(progress);
 
-                if (elapsed >= estimatedSeconds) {
+                if (elapsed >= actualSeconds) {
                     clearInterval(intervalId);
                     if (response.status === 'success') {
                         setPouringStatus('success');
