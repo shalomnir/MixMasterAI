@@ -70,7 +70,11 @@ def pour_ingredient(pin_number, duration, pump_id=None):
 # --- Flask App Setup ---
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'yoursecretkey123')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///cocktails.db'
+
+db_url = os.environ.get('DATABASE_URL', 'sqlite:///cocktails.db')
+if db_url.startswith('postgres://'):
+    db_url = db_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 JWT_SECRET = app.config['SECRET_KEY']
@@ -115,7 +119,7 @@ def ensure_db_initialized():
         except Exception:
             print("[MIGRATE] Adding personal_token column to user table...")
             with db.engine.connect() as conn:
-                conn.execute(db.text('ALTER TABLE user ADD COLUMN personal_token VARCHAR(36)'))
+                conn.execute(db.text('ALTER TABLE "user" ADD COLUMN personal_token VARCHAR(36)'))
                 conn.commit()
             print("[MIGRATE] personal_token column added.")
 
