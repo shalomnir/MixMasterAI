@@ -52,8 +52,12 @@ export function PouringProvider({ children }) {
         );
 
         let maxDuration = 0;
-        for (const [pumpId, ml] of Object.entries(recipe.ingredients || {})) {
-            const pump = pumpData[pumpId];
+        for (const [key, ml] of Object.entries(recipe.ingredients || {})) {
+            // The key could be an old numeric ID or the new ingredient_name string format
+            const pump = pumpData[key] || Object.values(pumpData).find(
+                p => (p.ingredient_name || '').toLowerCase() === String(key).toLowerCase()
+            );
+
             if (pump && pump.seconds_per_50ml) {
                 let scaledMl = (parseFloat(ml) / originalTotal) * targetVol;
                 if (isStrong && pump.is_alcohol) scaledMl *= 1.5;

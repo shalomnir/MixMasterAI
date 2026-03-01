@@ -47,6 +47,13 @@ export function resolveImage(recipe) {
     if (recipe.image_url) {
         return `${IMG_BASE}${recipe.image_url}`;
     }
-    const mapped = IMAGE_MAP[recipe.name];
-    return mapped ? `${IMG_BASE}${mapped}` : PLACEHOLDER_IMG;
+    if (recipe.name) {
+        const searchName = recipe.name.trim().toLowerCase();
+        for (const [key, val] of Object.entries(IMAGE_MAP)) {
+            if (key.toLowerCase() === searchName) {
+                return `${IMG_BASE}${val}`;
+            }
+        }
+    }
+    return PLACEHOLDER_IMG;
 }
